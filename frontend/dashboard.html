@@ -1,0 +1,1356 @@
+<!--
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Deals Dashboard</title>
+    
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f7fa;
+            min-height: 100vh;
+        }
+
+        .dashboard {
+            max-width: 1600px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .dashboard-header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding: 40px 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 12px;
+        }
+
+        .dashboard-header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .dashboard-header p {
+            font-size: 1.1em;
+            opacity: 0.95;
+        }
+
+        .filters-section {
+            background: white;
+            padding: 25px;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            margin-bottom: 30px;
+        }
+
+        .filters-section h3 {
+            margin-bottom: 20px;
+            color: #2c3e50;
+            font-size: 1.3em;
+        }
+
+        .filters-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 20px;
+        }
+
+        .filter-group {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .filter-group label {
+            font-size: 0.9em;
+            font-weight: 600;
+            color: #555;
+            margin-bottom: 8px;
+        }
+
+        .filter-group select,
+        .filter-group input {
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 1em;
+            transition: all 0.3s;
+            background: white;
+        }
+
+        .filter-group select:focus,
+        .filter-group input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .results-section {
+            background: white;
+            padding: 25px;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .results-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 25px;
+            padding-bottom: 20px;
+            border-bottom: 2px solid #e0e0e0;
+        }
+
+        .results-header h2 {
+            color: #2c3e50;
+            font-size: 1.5em;
+        }
+
+        .loading {
+            color: #667eea;
+            font-weight: 600;
+        }
+
+        .deals-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(500px, 1fr));
+            gap: 25px;
+        }
+
+        .deal-card {
+            background: #f8f9fa;
+            border-radius: 12px;
+            padding: 25px;
+            border-left: 5px solid #667eea;
+            transition: all 0.3s;
+        }
+
+        .deal-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 20px rgba(0,0,0,0.15);
+        }
+
+        .deal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: start;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #e0e0e0;
+        }
+
+        .deal-header h3 {
+            color: #2c3e50;
+            font-size: 1.3em;
+            margin: 0;
+            flex: 1;
+            line-height: 1.3;
+        }
+
+        .deal-amount {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-weight: 700;
+            font-size: 1.1em;
+            white-space: nowrap;
+            margin-left: 15px;
+        }
+
+        .deal-info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 20px;
+        }
+
+        .info-section {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid #e0e0e0;
+        }
+
+        .info-section h4 {
+            color: #667eea;
+            font-size: 0.95em;
+            margin-bottom: 12px;
+            padding-bottom: 8px;
+            border-bottom: 2px solid #f0f0f0;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .info-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 6px 0;
+            font-size: 0.9em;
+        }
+
+        .info-item .label {
+            font-weight: 600;
+            color: #666;
+        }
+
+        .info-item span:last-child {
+            color: #2c3e50;
+            text-align: right;
+            font-weight: 500;
+        }
+
+        .no-results {
+            text-align: center;
+            padding: 60px 20px;
+            color: #999;
+            font-size: 1.2em;
+        }
+
+        @media (max-width: 1024px) {
+            .deals-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .filters-grid {
+                grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            }
+        }
+
+        @media (max-width: 768px) {
+            .dashboard-header h1 {
+                font-size: 1.8em;
+            }
+            
+            .filters-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .deal-info-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .deal-header {
+                flex-direction: column;
+                align-items: start;
+            }
+            
+            .deal-amount {
+                margin-left: 0;
+                margin-top: 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        function DealsDashboard() {
+            const [deals, setDeals] = useState([]);
+            const [loading, setLoading] = useState(false);
+            const [filterOptions, setFilterOptions] = useState({});
+            
+            const [filters, setFilters] = useState({
+                days_back: 14,
+                deal_stage: '',
+                specialty_mcp_use: '',
+                country: 'United States',
+                billing_state: '',
+                billing_city: '',
+                min_seats: '',
+                min_tso: '',
+                product: '',
+                pipeline: 'Sales - Global'
+            });
+
+            const fetchFilterOptions = async () => {
+                
+                try {
+                    // Build params with ALL current filters
+                    const params = new URLSearchParams();
+                    Object.entries(filters).forEach(([key, value]) => {
+                        if (value && value !== 'None' && value !== 'null') {
+                            params.append(key, value);
+                        }
+                    });
+                    
+                    const response = await fetch(`http://localhost:5001/api/filters?${params}`);
+                    const data = await response.json();
+                    setFilterOptions(data);
+                } catch (error) {
+                    console.error('Error fetching filter options:', error);
+                }
+            };
+                
+            //     console.log('Fetching filter options for days_back:', filters.days_back);
+            //     try {
+            //         const url = `http://localhost:5001/api/filters?days_back=${filters.days_back}`;
+            //         console.log('Filter options URL:', url);
+            //         const response = await fetch(url);
+            //         const data = await response.json();
+            //         console.log('Filter options received:', data);
+            //         setFilterOptions(data);
+            //     } catch (error) {
+            //         console.error('Error fetching filter options:', error);
+            //     }
+            // };
+
+            const fetchDeals = async () => {
+                setLoading(true);
+                
+                try {
+                    const params = new URLSearchParams();
+                    Object.entries(filters).forEach(([key, value]) => {
+                        if (value && value !== 'None' && value !== 'null') {
+                            params.append(key, value);
+                        }
+                    });
+                    
+                    const response = await fetch(`http://localhost:5001/api/deals?${params}`);
+                    const data = await response.json();
+                    
+                    setDeals(data);
+                } catch (error) {
+                    console.error('Error fetching deals:', error);
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            const updateFilter = (key, value) => {
+                const cleanValue = value === 'None' || value === 'null' ? '' : value;
+                setFilters(prev => ({ ...prev, [key]: cleanValue }));
+            };
+
+            const formatDate = (dateString) => {
+                if (!dateString) return 'N/A';
+                return new Date(dateString).toLocaleDateString();
+            };
+
+            const formatCurrency = (amount) => {
+                return new Intl.NumberFormat('en-US', {
+                    style: 'currency',
+                    currency: 'USD',
+                    minimumFractionDigits: 0,
+                    maximumFractionDigits: 0
+                }).format(amount);
+            };
+
+            useEffect(() => {
+                fetchFilterOptions();
+                fetchDeals();
+                console.log('TEST: any filter change ', filters);
+            }, [filters]);
+            
+            return (
+                <div className="dashboard">
+                    <header className="dashboard-header">
+                        <h1>📊 Deals Dashboard</h1>
+                        <p>Filter and view deals by stage, specialty, location, and more</p>
+                    </header>
+
+                    <div className="filters-section">
+                        <h3>Filters</h3>
+                        <div className="filters-grid">
+                            
+                            <div className="filter-group">
+                                <label>📅 Time Period</label>
+                                <select 
+                                    value={filters.days_back} 
+                                    onChange={(e) => updateFilter('days_back', e.target.value)}
+                                >
+                                    <option value="7">Last 7 days</option>
+                                    <option value="14">Last 14 days</option>
+                                    <option value="30">Last 30 days</option>
+                                    <option value="60">Last 60 days</option>
+                                    <option value="90">Last 90 days</option>
+                                </select>
+                            </div>
+
+                            <div className="filter-group">
+                                <label>🎯 Deal Stage</label>
+                                <select 
+                                    value={filters.deal_stage} 
+                                    onChange={(e) => updateFilter('deal_stage', e.target.value)}
+                                >
+                                <option value="">All Stages</option>
+                                <optgroup label="All Stages">
+                                    {filterOptions.deal_stages?.map(stage => (
+                                        <option key={stage.id} value={stage.id}>
+                                            {stage.label} {stage.pipeline && `(${stage.pipeline})`}
+                                        </option>
+                                    ))}
+                                </optgroup>
+                                </select>
+                            </div>
+
+                            <div className="filter-group">
+                                <label>🔄 Pipeline</label>
+                                <select 
+                                    value={filters.pipeline} 
+                                    onChange={(e) => updateFilter('pipeline', e.target.value)}
+                                >
+                                    <option value="">All Pipelines</option>
+                                    {filterOptions.pipelines?.map(p => (
+                                        <option key={p.id} value={p.name}>{p.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div className="filter-group">
+                                <label>🏥 Specialty</label>
+                                <select 
+                                    value={filters.specialty_mcp_use} 
+                                    onChange={(e) => updateFilter('specialty_mcp_use', e.target.value)}
+                                >
+                                    <option value="">All Specialties</option>
+                                    {filterOptions.specialties?.map(s => (
+                                        <option key={s} value={s}>{s}</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div className="filter-group">
+                                <label>🌍 Country</label>
+                                <select 
+                                    value={filters.country} 
+                                    onChange={(e) => updateFilter('country', e.target.value)}
+                                >
+                                    <option value="">All Countries</option>
+                                    {filterOptions.countries?.map(c => (
+                                        <option key={c} value={c}>{c}</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div className="filter-group">
+                                <label>📍 State</label>
+                                <select 
+                                    value={filters.billing_state} 
+                                    onChange={(e) => updateFilter('billing_state', e.target.value)}
+                                >
+                                    <option value="">All States</option>
+                                    {filterOptions.billing_states?.map(s => (
+                                        <option key={s} value={s}>{s}</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div className="filter-group">
+                                <label>🏙️ City</label>
+                                <select 
+                                    value={filters.billing_city} 
+                                    onChange={(e) => updateFilter('billing_city', e.target.value)}
+                                >
+                                    <option value="">All Cities</option>
+                                    {filterOptions.billing_cities?.map(c => (
+                                        <option key={c} value={c}>{c}</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div className="filter-group">
+                                <label>📦 Product</label>
+                                <select 
+                                    value={filters.product} 
+                                    onChange={(e) => updateFilter('product', e.target.value)}
+                                >
+                                    <option value="">All Products</option>
+                                    {filterOptions.products?.map(p => (
+                                        <option key={p} value={p}>{p}</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div className="filter-group">
+                                <label>💺 Min Seats</label>
+                                <input 
+                                    type="number" 
+                                    value={filters.min_seats} 
+                                    onChange={(e) => updateFilter('min_seats', e.target.value)}
+                                    placeholder="e.g., 5"
+                                    min="0"
+                                />
+                            </div>
+
+                            <div className="filter-group">
+                                <label>📊 Min TSO</label>
+                                <input 
+                                    type="number" 
+                                    value={filters.min_tso} 
+                                    onChange={(e) => updateFilter('min_tso', e.target.value)}
+                                    placeholder="e.g., 10"
+                                    min="0"
+                                />
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="results-section">
+                        <div className="results-header">
+                            <h2>Results ({deals.length} deals)</h2>
+                            {loading && <span className="loading">⏳ Loading...</span>}
+                        </div>
+
+                        <div className="deals-grid">
+                            {deals.map(deal => (
+                                <div key={deal.deal_id} className="deal-card">
+                                    
+                                    <div className="deal-header">
+                                        <h3><a href={deal.deal_url} target="_blank" rel="noopener noreferrer" style={{color: '#2c3e50', textDecoration: 'none'}}> 
+                                            {deal.deal_name}
+                                            </a>
+                                            </h3>
+                                        <span className="deal-amount">
+                                            {formatCurrency(deal.amount)}
+                                        </span>
+                                    </div>
+                                    
+                                    <div className="deal-info-grid">
+                                        
+                                        <div className="info-section">
+                                            <h4>Company & Contact</h4>
+                                            <div className="info-item">
+                                                <span className="label">Company:</span>
+                                                <span>{deal.associated_company_name || 'N/A'}</span>
+                                            </div>
+                                            <div className="info-item">
+                                                <span className="label">Contact Email:</span>
+                                                <span>{deal.associated_contact_email || 'N/A'}</span>
+                                            </div>
+                                        </div>
+
+                                        <div className="info-section">
+                                            <h4>📍 Location</h4>
+                                            <div className="info-item">
+                                                <span className="label">City:</span>
+                                                <span>{deal.billing_city || 'N/A'}</span>
+                                            </div>
+                                            <div className="info-item">
+                                                <span className="label">State:</span>
+                                                <span>{deal.billing_state || 'N/A'}</span>
+                                            </div>
+                                            <div className="info-item">
+                                                <span className="label">Country:</span>
+                                                <span>{deal.country || 'N/A'}</span>
+                                            </div>
+                                        </div>
+
+                                        <div className="info-section">
+                                            <h4>🏥 Medical Info</h4>
+                                            <div className="info-item">
+                                                <span className="label">Specialty:</span>
+                                                <span>{deal.specialty_mcp_use || 'N/A'}</span>
+                                            </div>
+                                            <div className="info-item">
+                                                <span className="label">EHR:</span>
+                                                <span>{deal.ehr || 'N/A'}</span>
+                                            </div>
+                                        </div>
+
+                                        <div className="info-section">
+                                            <h4>📦 Product & Seats</h4>
+                                            <div className="info-item">
+                                                <span className="label">Product:</span>
+                                                <span>{deal.product || 'N/A'}</span>
+                                            </div>
+                                            <div className="info-item">
+                                                <span className="label">Seats:</span>
+                                                <span>{deal.seats}</span>
+                                            </div>
+                                            <div className="info-item">
+                                                <span className="label">TSO:</span>
+                                                <span>{deal.tso}</span>
+                                            </div>
+                                        </div>
+
+                                        <div className="info-section">
+                                            <h4>👤 Owner & Pipeline</h4>
+                                            <div className="info-item">
+                                                <span className="label">Owner:</span>
+                                                <span>{deal.owner_name || 'N/A'}</span>
+                                            </div>
+                                            <div className="info-item">
+                                                <span className="label">Pipeline:</span>
+                                                <span>{deal.pipeline_name || 'N/A'}</span>
+                                            </div>
+                                            <div className="info-item">
+                                                <span className="label">Stage:</span>
+                                                <span>{deal.dealstage_name || 'N/A'}</span>
+                                            </div>
+                                        </div>
+
+                                        <div className="info-section">
+                                            <h4>📅 Dates</h4>
+                                            <div className="info-item">
+                                                <span className="label">Closed:</span>
+                                                <span>{formatDate(deal.close_date)}</span>
+                                            </div>
+                                        </div>
+
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+
+                        {deals.length === 0 && !loading && (
+                            <div className="no-results">
+                                <p>No deals found matching your filters</p>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
+        }
+
+        ReactDOM.render(<DealsDashboard />, document.getElementById('root'));
+    </script>
+</body>
+</html> -->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Deals Dashboard with Lookalikes</title>
+    
+    <!-- React & Babel -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f7fa;
+            min-height: 100vh;
+        }
+
+        .dashboard {
+            max-width: 1600px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .dashboard-header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding: 40px 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 12px;
+        }
+
+        .dashboard-header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .filters-section {
+            background: white;
+            padding: 25px;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            margin-bottom: 30px;
+        }
+
+        .filters-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 20px;
+        }
+
+        .filter-group label {
+            font-size: 0.9em;
+            font-weight: 600;
+            color: #555;
+            margin-bottom: 8px;
+            display: block;
+        }
+
+        .filter-group select,
+        .filter-group input {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 1em;
+            transition: all 0.3s;
+        }
+
+        .filter-group select:focus,
+        .filter-group input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .results-section {
+            background: white;
+            padding: 25px;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .results-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 25px;
+            padding-bottom: 20px;
+            border-bottom: 2px solid #e0e0e0;
+        }
+
+        .deals-grid {
+            display: grid;
+            gap: 20px;
+        }
+
+        /* Collapsible Deal Card */
+        .deal-card {
+            background: #f8f9fa;
+            border-radius: 12px;
+            border-left: 5px solid #667eea;
+            overflow: hidden;
+            transition: all 0.3s;
+        }
+
+        .deal-card:hover {
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+
+        .deal-header-toggle {
+            padding: 20px 25px;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: white;
+            border-bottom: 1px solid #e0e0e0;
+            user-select: none;
+        }
+
+        .deal-header-toggle:hover {
+            background: #f8f9fa;
+        }
+
+        .deal-title-section {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .deal-title-section h3 {
+            color: #2c3e50;
+            font-size: 1.3em;
+            margin: 0;
+        }
+
+        .deal-title-section h3 a {
+            color: #2c3e50;
+            text-decoration: none;
+        }
+
+        .deal-title-section h3 a:hover {
+            color: #667eea;
+        }
+
+        .deal-amount {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-weight: 700;
+            font-size: 1.1em;
+            white-space: nowrap;
+        }
+
+        .toggle-icon {
+            font-size: 1.5em;
+            color: #667eea;
+            transition: transform 0.3s;
+        }
+
+        .toggle-icon.expanded {
+            transform: rotate(180deg);
+        }
+
+        .deal-content {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease-out;
+        }
+
+        .deal-content.expanded {
+            max-height: 2000px;
+            transition: max-height 0.5s ease-in;
+        }
+
+        .deal-info-section {
+            padding: 25px;
+            border-bottom: 2px solid #e0e0e0;
+        }
+
+        .deal-info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 20px;
+        }
+
+        .info-section {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid #e0e0e0;
+        }
+
+        .info-section h4 {
+            color: #667eea;
+            font-size: 0.95em;
+            margin-bottom: 12px;
+            padding-bottom: 8px;
+            border-bottom: 2px solid #f0f0f0;
+            text-transform: uppercase;
+        }
+
+        .info-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 6px 0;
+            font-size: 0.9em;
+        }
+
+        .info-item .label {
+            font-weight: 600;
+            color: #666;
+        }
+
+        .info-item span:last-child {
+            color: #2c3e50;
+            text-align: right;
+            font-weight: 500;
+        }
+
+        /* Lookalike Section */
+        .lookalike-section {
+            padding: 25px;
+            background: #f8f9fa;
+        }
+
+        .lookalike-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .lookalike-header h4 {
+            font-size: 1.2em;
+            color: #2c3e50;
+        }
+
+        .find-lookalikes-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .find-lookalikes-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+
+        .find-lookalikes-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .lookalike-placeholder {
+            text-align: center;
+            padding: 40px;
+            color: #999;
+            font-style: italic;
+        }
+
+        .lookalike-results {
+            display: grid;
+            gap: 15px;
+        }
+
+        .lookalike-card {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 3px solid #667eea;
+        }
+
+        .lookalike-card h5 {
+            color: #2c3e50;
+            margin-bottom: 8px;
+            font-size: 1.1em;
+        }
+
+        .lookalike-meta {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 10px;
+            margin-top: 10px;
+            font-size: 0.9em;
+            color: #666;
+        }
+
+        .loading {
+            color: #667eea;
+            font-weight: 600;
+        }
+
+        .no-results {
+            text-align: center;
+            padding: 60px 20px;
+            color: #999;
+            font-size: 1.2em;
+        }
+
+        @media (max-width: 768px) {
+            .deal-title-section {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .deal-amount {
+                margin-left: 0;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        function DealCard({ deal }) {
+            const [expanded, setExpanded] = useState(false);
+            const [lookalikes, setLookalikes] = useState(null);
+            const [loadingLookalikes, setLoadingLookalikes] = useState(false);
+
+            const formatDate = (dateString) => {
+                if (!dateString) return 'N/A';
+                return new Date(dateString).toLocaleDateString();
+            };
+
+            const formatCurrency = (amount) => {
+                return new Intl.NumberFormat('en-US', {
+                    style: 'currency',
+                    currency: 'USD',
+                    minimumFractionDigits: 0,
+                    maximumFractionDigits: 0
+                }).format(amount);
+            };
+
+            const findLookalikes = async () => {
+                setLoadingLookalikes(true);
+                try {
+                    // Call your lookalike API endpoint
+                    // This is a placeholder - you'll need to implement this
+                    const response = await fetch(`http://localhost:5001/api/lookalikes?deal_id=${deal.deal_id}`);
+                    const data = await response.json();
+                    setLookalikes(data);
+                } catch (error) {
+                    console.error('Error fetching lookalikes:', error);
+                    setLookalikes({ error: 'Failed to load lookalikes' });
+                } finally {
+                    setLoadingLookalikes(false);
+                }
+            };
+
+            return (
+                <div className="deal-card">
+                    <div className="deal-header-toggle" onClick={() => setExpanded(!expanded)}>
+                        <div className="deal-title-section">
+                            <h3>
+                                <a href={deal.deal_url} target="_blank" rel="noopener noreferrer">
+                                    {deal.deal_name}
+                                </a>
+                            </h3>
+                            <span className="deal-amount">{formatCurrency(deal.amount)}</span>
+                        </div>
+                        <span className={`toggle-icon ${expanded ? 'expanded' : ''}`}>▼</span>
+                    </div>
+
+                    <div className={`deal-content ${expanded ? 'expanded' : ''}`}>
+                        {/* Deal Info Section */}
+                        <div className="deal-info-section">
+                            <div className="deal-info-grid">
+                                <div className="info-section">
+                                    <h4>Company & Contact</h4>
+                                    <div className="info-item">
+                                        <span className="label">Company:</span>
+                                        <span>{deal.associated_company_name || 'N/A'}</span>
+                                    </div>
+                                    <div className="info-item">
+                                        <span className="label">Contact:</span>
+                                        <span>{deal.associated_contact_email || 'N/A'}</span>
+                                    </div>
+                                </div>
+
+                                <div className="info-section">
+                                    <h4>📍 Location</h4>
+                                    <div className="info-item">
+                                        <span className="label">City:</span>
+                                        <span>{deal.billing_city || 'N/A'}</span>
+                                    </div>
+                                    <div className="info-item">
+                                        <span className="label">State:</span>
+                                        <span>{deal.billing_state || 'N/A'}</span>
+                                    </div>
+                                    <div className="info-item">
+                                        <span className="label">Country:</span>
+                                        <span>{deal.country || 'N/A'}</span>
+                                    </div>
+                                </div>
+
+                                <div className="info-section">
+                                    <h4>🏥 Medical Info</h4>
+                                    <div className="info-item">
+                                        <span className="label">Specialty:</span>
+                                        <span>{deal.specialty_mcp_use || 'N/A'}</span>
+                                    </div>
+                                    <div className="info-item">
+                                        <span className="label">EHR:</span>
+                                        <span>{deal.ehr || 'N/A'}</span>
+                                    </div>
+                                </div>
+
+                                <div className="info-section">
+                                    <h4>📦 Product & Seats</h4>
+                                    <div className="info-item">
+                                        <span className="label">Product:</span>
+                                        <span>{deal.product || 'N/A'}</span>
+                                    </div>
+                                    <div className="info-item">
+                                        <span className="label">Seats:</span>
+                                        <span>{deal.seats}</span>
+                                    </div>
+                                    <div className="info-item">
+                                        <span className="label">TSO:</span>
+                                        <span>{deal.tso}</span>
+                                    </div>
+                                </div>
+
+                                <div className="info-section">
+                                    <h4>👤 Owner & Pipeline</h4>
+                                    <div className="info-item">
+                                        <span className="label">Owner:</span>
+                                        <span>{deal.owner_name || 'N/A'}</span>
+                                    </div>
+                                    <div className="info-item">
+                                        <span className="label">Pipeline:</span>
+                                        <span>{deal.pipeline_name || 'N/A'}</span>
+                                    </div>
+                                    <div className="info-item">
+                                        <span className="label">Stage:</span>
+                                        <span>{deal.dealstage_name || 'N/A'}</span>
+                                    </div>
+                                </div>
+
+                                <div className="info-section">
+                                    <h4>📅 Dates</h4>
+                                    <div className="info-item">
+                                        <span className="label">Closed:</span>
+                                        <span>{formatDate(deal.close_date)}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Lookalike Section */}
+                        <div className="lookalike-section">
+                            <div className="lookalike-header">
+                                <h4>🔍 Lookalike Companies</h4>
+                                <button 
+                                    className="find-lookalikes-btn"
+                                    onClick={findLookalikes}
+                                    disabled={loadingLookalikes}
+                                >
+                                    {loadingLookalikes ? 'Finding...' : 'Find Lookalikes'}
+                                </button>
+                            </div>
+
+                            {!lookalikes && !loadingLookalikes && (
+                                <div className="lookalike-placeholder">
+                                    Click "Find Lookalikes" to discover similar companies
+                                </div>
+                            )}
+
+                            {loadingLookalikes && (
+                                <div className="lookalike-placeholder loading">
+                                    🔄 Searching for similar companies...
+                                </div>
+                            )}
+
+                            {lookalikes && !loadingLookalikes && (
+                                <div className="lookalike-results">
+                                    {lookalikes.error ? (
+                                        <div className="lookalike-placeholder">{lookalikes.error}</div>
+                                    ) : lookalikes.length === 0 ? (
+                                        <div className="lookalike-placeholder">No lookalikes found</div>
+                                    ) : (
+                                        lookalikes.map((org, idx) => (
+                                            <div key={idx} className="lookalike-card">
+                                                <h5>{org.name}</h5>
+                                                <div className="lookalike-meta">
+                                                    <span>📍 {org.city}, {org.state}</span>
+                                                    <span>🏥 {org.specialty}</span>
+                                                    <span>👥 {org.physician_count} physicians</span>
+                                                    <span>🎯 {org.similarity_score}% match</span>
+                                                </div>
+                                            </div>
+                                        ))
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        function DealsDashboard() {
+            const [deals, setDeals] = useState([]);
+            const [loading, setLoading] = useState(false);
+            const [filterOptions, setFilterOptions] = useState({});
+            
+            const [filters, setFilters] = useState({
+                days_back: 14,
+                deal_stage: '',
+                specialty_mcp_use: '',
+                country: 'United States',
+                billing_state: '',
+                billing_city: '',
+                min_seats: '5',
+                min_tso: '',
+                product: '',
+                pipeline: ''
+            });
+
+            const fetchFilterOptions = async () => {
+                try {
+                    const params = new URLSearchParams();
+                    Object.entries(filters).forEach(([key, value]) => {
+                        if (value && value !== 'None' && value !== 'null') {
+                            params.append(key, value);
+                        }
+                    });
+                    
+                    const response = await fetch(`http://localhost:5001/api/filters?${params}`);
+                    const data = await response.json();
+                    setFilterOptions(data);
+                } catch (error) {
+                    console.error('Error fetching filter options:', error);
+                }
+            };
+
+            const fetchDeals = async () => {
+                setLoading(true);
+                
+                try {
+                    const params = new URLSearchParams();
+                    Object.entries(filters).forEach(([key, value]) => {
+                        if (value && value !== 'None' && value !== 'null') {
+                            params.append(key, value);
+                        }
+                    });
+                    
+                    const response = await fetch(`http://localhost:5001/api/deals?${params}`);
+                    const data = await response.json();
+                    
+                    setDeals(data);
+                } catch (error) {
+                    console.error('Error fetching deals:', error);
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            const updateFilter = (key, value) => {
+                const cleanValue = value === 'None' || value === 'null' ? '' : value;
+                setFilters(prev => ({ ...prev, [key]: cleanValue }));
+            };
+
+            useEffect(() => {
+                fetchFilterOptions();
+                fetchDeals();
+            }, [filters]);
+
+            return (
+                <div className="dashboard">
+                    <header className="dashboard-header">
+                        <h1>📊 Deals Dashboard</h1>
+                        <p>Find deals and discover lookalike companies</p>
+                    </header>
+
+                    <div className="filters-section">
+                        <div className="filters-grid">
+                            <div className="filter-group">
+                                <label>📅 Time Period</label>
+                                <select value={filters.days_back} onChange={(e) => updateFilter('days_back', e.target.value)}>
+                                    <option value="7">Last 7 days</option>
+                                    <option value="14">Last 14 days</option>
+                                    <option value="30">Last 30 days</option>
+                                    <option value="60">Last 60 days</option>
+                                    <option value="90">Last 90 days</option>
+                                </select>
+                            </div>
+
+                            <div className="filter-group">
+                                <label>🎯 Deal Stage</label>
+                                <select value={filters.deal_stage} onChange={(e) => updateFilter('deal_stage', e.target.value)}>
+                                    <option value="">All Stages</option>
+                                    {filterOptions.deal_stages?.map(stage => (
+                                        <option key={stage.id} value={stage.id}>
+                                            {stage.label} ({stage.pipeline})
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div className="filter-group">
+                                <label>🔄 Pipeline</label>
+                                <select value={filters.pipeline} onChange={(e) => updateFilter('pipeline', e.target.value)}>
+                                    <option value="">All Pipelines</option>
+                                    {filterOptions.pipelines?.map(p => (
+                                        <option key={p.id} value={p.name}>{p.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div className="filter-group">
+                                <label>🏥 Specialty</label>
+                                <select value={filters.specialty_mcp_use} onChange={(e) => updateFilter('specialty_mcp_use', e.target.value)}>
+                                    <option value="">All Specialties</option>
+                                    {filterOptions.specialties?.map(s => (
+                                        <option key={s} value={s}>{s}</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div className="filter-group">
+                                <label>🌍 Country</label>
+                                <select value={filters.country} onChange={(e) => updateFilter('country', e.target.value)}>
+                                    <option value="">All Countries</option>
+                                    {filterOptions.countries?.map(c => (
+                                        <option key={c} value={c}>{c}</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div className="filter-group">
+                                <label>📍 State</label>
+                                <select value={filters.billing_state} onChange={(e) => updateFilter('billing_state', e.target.value)}>
+                                    <option value="">All States</option>
+                                    {filterOptions.billing_states?.map(s => (
+                                        <option key={s} value={s}>{s}</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div className="filter-group">
+                                <label>🏙️ City</label>
+                                <select value={filters.billing_city} onChange={(e) => updateFilter('billing_city', e.target.value)}>
+                                    <option value="">All Cities</option>
+                                    {filterOptions.billing_cities?.map(c => (
+                                        <option key={c} value={c}>{c}</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div className="filter-group">
+                                <label>📦 Product</label>
+                                <select value={filters.product} onChange={(e) => updateFilter('product', e.target.value)}>
+                                    <option value="">All Products</option>
+                                    {filterOptions.products?.map(p => (
+                                        <option key={p} value={p}>{p}</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div className="filter-group">
+                                <label>💺 Min Seats</label>
+                                <input 
+                                    type="number" 
+                                    value={filters.min_seats} 
+                                    onChange={(e) => updateFilter('min_seats', e.target.value)}
+                                    placeholder="e.g., 5"
+                                />
+                            </div>
+
+                            <div className="filter-group">
+                                <label>📊 Min TSO</label>
+                                <input 
+                                    type="number" 
+                                    value={filters.min_tso} 
+                                    onChange={(e) => updateFilter('min_tso', e.target.value)}
+                                    placeholder="e.g., 10"
+                                />
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="results-section">
+                        <div className="results-header">
+                            <h2>Results ({deals.length} deals)</h2>
+                            {loading && <span className="loading">⏳ Loading...</span>}
+                        </div>
+
+                        <div className="deals-grid">
+                            {deals.map(deal => (
+                                <DealCard key={deal.deal_id} deal={deal} />
+                            ))}
+                        </div>
+
+                        {deals.length === 0 && !loading && (
+                            <div className="no-results">
+                                <p>No deals found matching your filters</p>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
+        }
+
+        ReactDOM.render(<DealsDashboard />, document.getElementById('root'));
+    </script>
+</body>
+</html>
