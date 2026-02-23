@@ -43,7 +43,7 @@ CLAY_WEBHOOK_URL = os.getenv('CLAY_WEBHOOK_URL')
 app = Server("gtm-mcp-server")
 flask_app = Flask(__name__)
 # CORS: allow Vercel frontend domain + localhost for dev
-ALLOWED_ORIGINS = os.getenv('ALLOWED_ORIGINS', 'http://localhost:3000,http://localhost:5001').split(',')
+ALLOWED_ORIGINS = os.getenv('ALLOWED_ORIGINS', 'http://localhost:3000,https://web-production-768f7.up.railway.app').split(',')
 CORS(flask_app, resources={r"/api/*": {"origins": ALLOWED_ORIGINS}}, supports_credentials=True)
 
 # Redis setup
