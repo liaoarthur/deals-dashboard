@@ -44,7 +44,8 @@ app = Server("gtm-mcp-server")
 flask_app = Flask(__name__)
 # CORS: allow Vercel frontend domain + localhost for dev
 ALLOWED_ORIGINS = os.getenv('ALLOWED_ORIGINS', 'https://deals-dashboard-rho.vercel.app').split(',')
-CORS(flask_app, resources={r"/api/*": {"origins": ALLOWED_ORIGINS}}, supports_credentials=True)
+CORS(flask_app, origins=ALLOWED_ORIGINS, supports_credentials=True)
+# CORS(flask_app, resources={r"/api/*": {"origins": ALLOWED_ORIGINS}}, supports_credentials=True)
 
 # Redis setup
 try:
