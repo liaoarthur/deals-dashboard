@@ -3,11 +3,16 @@ import os
 import sys
 import json
 import requests
+import secrets
+import time
 
 from datetime import datetime, timedelta
 import redis
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, session
 from flask_cors import CORS
+from werkzeug.security import generate_password_hash, check_password_hash
+from functools import wraps
+from collections import defaultdict
 
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
@@ -42,6 +47,70 @@ CLAY_WEBHOOK_URL = os.getenv('CLAY_WEBHOOK_URL')
 # Create the server
 app = Server("gtm-mcp-server")
 flask_app = Flask(__name__)
+
+# ─── Session & Authentication Configuration ────────────────────────────────────
+# SECRET_KEY: used for signing session cookies. Generate one with:
+#   python -c "import secrets; print(secrets.token_hex(32))"
+# Set as SECRET_KEY env var in Railway. Falls back to random key (sessions won't
+# survive server restarts without a stable key).
+flask_app.secret_key = os.getenv('SECRET_KEY', secrets.token_hex(32))
+flask_app.config.update(
+    SESSION_COOKIE_SECURE=True,       # Only send cookie over HTTPS
+    SESSION_COOKIE_HTTPONLY=True,      # JavaScript can't read the cookie (XSS protection)
+    SESSION_COOKIE_SAMESITE='None',    # Required for cross-origin Vercel→Railway cookies
+    PERMANENT_SESSION_LIFETIME=timedelta(hours=24),  # Session expires after 24 hours
+)
+
+# AUTH_USERS: comma-separated email:passwordhash pairs.
+# Generate hashes with: python generate_password.py <password>
+# Format: "admin@co.com:pbkdf2:sha256:...,user@co.com:pbkdf2:sha256:..."
+AUTH_USERS = {}
+_raw_users = os.getenv('AUTH_USERS', '')
+if _raw_users:
+    for entry in _raw_users.split(','):
+        entry = entry.strip()
+        if ':' in entry:
+            # Split on first colon only — password hashes contain colons
+            email, pwhash = entry.split(':', 1)
+            AUTH_USERS[email.strip().lower()] = pwhash.strip()
+    print(f"[AUTH] Loaded {len(AUTH_USERS)} user(s): {', '.join(AUTH_USERS.keys())}", file=sys.stderr)
+else:
+    print("[AUTH] WARNING: AUTH_USERS not set — no users can log in", file=sys.stderr)
+
+# ─── Rate Limiting (login endpoint) ────────────────────────────────────────────
+# Simple in-memory rate limiter: max 5 login attempts per IP per 60 seconds.
+_login_attempts = defaultdict(list)  # { ip: [timestamp, timestamp, ...] }
+_LOGIN_MAX_ATTEMPTS = 5
+_LOGIN_WINDOW_SECONDS = 60
+
+
+def _is_rate_limited(ip):
+    """Check if an IP has exceeded login attempt limit."""
+    now = time.time()
+    # Prune old attempts outside the window
+    _login_attempts[ip] = [t for t in _login_attempts[ip] if now - t < _LOGIN_WINDOW_SECONDS]
+    return len(_login_attempts[ip]) >= _LOGIN_MAX_ATTEMPTS
+
+
+def _record_login_attempt(ip):
+    """Record a login attempt for rate limiting."""
+    _login_attempts[ip].append(time.time())
+
+
+# ─── Authentication Decorator ──────────────────────────────────────────────────
+def require_auth(f):
+    """
+    Decorator to protect endpoints. Checks for a valid session.
+    Returns 401 JSON if not authenticated — frontend catches this and redirects to login.
+    """
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not session.get('authenticated'):
+            return jsonify({'error': 'Unauthorized', 'code': 'AUTH_REQUIRED'}), 401
+        return f(*args, **kwargs)
+    return decorated
+
+
 # CORS: allow Vercel frontend domain + localhost for dev
 ALLOWED_ORIGINS = os.getenv('ALLOWED_ORIGINS', 'https://deals-dashboard-rho.vercel.app').split(',')
 CORS(flask_app, origins=ALLOWED_ORIGINS, supports_credentials=True)
@@ -468,6 +537,7 @@ def get_specialty_label(internal_value):
 # ========================================
 
 @flask_app.route('/api/deals', methods=['GET'])
+@require_auth
 def get_deals():
     """
     Get deals with filters
@@ -886,6 +956,7 @@ def get_deals():
 
 #     uses calculated cutoff vs 14 days as above
 @flask_app.route('/api/filters', methods=['GET'])
+@require_auth
 def get_filter_options():
     """Get correlated filter values based on current filters"""
     
@@ -1115,6 +1186,80 @@ def get_filter_options():
     
     return jsonify(filter_options)
 
+# ─── Authentication Endpoints ──────────────────────────────────────────────────
+
+@flask_app.route('/api/login', methods=['POST'])
+def login():
+    """
+    Authenticate a user with email and password.
+    Sets a signed session cookie on success.
+
+    POST body (JSON):
+    - email (required)
+    - password (required)
+
+    Rate limited: 5 attempts per IP per 60 seconds.
+    """
+    ip = request.remote_addr or 'unknown'
+
+    # Rate limiting check
+    if _is_rate_limited(ip):
+        print(f"[AUTH] Rate limited: {ip}", file=sys.stderr)
+        return jsonify({'error': 'Too many login attempts. Try again in 1 minute.'}), 429
+
+    data = request.get_json()
+    if not data:
+        _record_login_attempt(ip)
+        return jsonify({'error': 'Request body is required'}), 400
+
+    email = (data.get('email') or '').strip().lower()
+    password = data.get('password') or ''
+
+    if not email or not password:
+        _record_login_attempt(ip)
+        return jsonify({'error': 'Email and password are required'}), 400
+
+    # Look up user
+    stored_hash = AUTH_USERS.get(email)
+    if not stored_hash or not check_password_hash(stored_hash, password):
+        _record_login_attempt(ip)
+        print(f"[AUTH] Failed login attempt for '{email}' from {ip}", file=sys.stderr)
+        return jsonify({'error': 'Invalid email or password'}), 401
+
+    # Success — set session
+    session.permanent = True  # Use PERMANENT_SESSION_LIFETIME (24h)
+    session['authenticated'] = True
+    session['email'] = email
+    session['login_time'] = datetime.utcnow().isoformat()
+
+    print(f"[AUTH] Successful login: {email} from {ip}", file=sys.stderr)
+    return jsonify({'success': True, 'email': email})
+
+
+@flask_app.route('/api/logout', methods=['POST'])
+def logout():
+    """Clear the session and log the user out."""
+    email = session.get('email', 'unknown')
+    session.clear()
+    print(f"[AUTH] Logged out: {email}", file=sys.stderr)
+    return jsonify({'success': True})
+
+
+@flask_app.route('/api/check-auth', methods=['GET'])
+def check_auth():
+    """
+    Check if the current session is authenticated.
+    Called by the frontend on page load to decide whether to show
+    the dashboard or redirect to the login page.
+    """
+    if session.get('authenticated'):
+        return jsonify({
+            'authenticated': True,
+            'email': session.get('email')
+        })
+    return jsonify({'authenticated': False}), 401
+
+
 @flask_app.route('/health', methods=['GET'])
 def health():
     return jsonify({
@@ -1122,6 +1267,7 @@ def health():
         'redis': REDIS_ENABLED,
         'openai': openai_client is not None,
         'clay': CLAY_WEBHOOK_URL is not None,
+        'auth_users_configured': len(AUTH_USERS) > 0,
     })
 
 # NEW: Function to get organizations from Definitive with firmographic details
@@ -1959,6 +2105,7 @@ def get_match_reasons(company_data, org_data, score):
     return reasons
 
 @flask_app.route('/api/clay-seed', methods=['POST'])
+@require_auth
 def clay_seed():
     """
     Send seed data to a Clay table via webhook.
@@ -2022,6 +2169,7 @@ def clay_seed():
 # 4. Frontend polls /api/clay-search-status/<domain> every 3s until status="complete"
 
 @flask_app.route('/api/check-clay-search', methods=['POST'])
+@require_auth
 def check_clay_search():
     """
     Check if a lookalike company has been searched before in Clay.
@@ -2066,6 +2214,7 @@ def check_clay_search():
 
 
 @flask_app.route('/api/trigger-clay-search', methods=['POST'])
+@require_auth
 def trigger_clay_search():
     """
     Trigger a new Clay contact search for a lookalike company.
@@ -2298,6 +2447,7 @@ def clay_contact_result():
 
 
 @flask_app.route('/api/clay-search-status/<path:company_key>', methods=['GET'])
+@require_auth
 def clay_search_status(company_key):
     """
     Poll for Clay search results by domain.
@@ -2333,6 +2483,7 @@ def clay_search_status(company_key):
 
 
 @flask_app.route('/api/lookalikes', methods=['GET'])
+@require_auth
 def get_lookalikes():
     """
     Find lookalike organizations from Definitive Healthcare for a deal.

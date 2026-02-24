@@ -1,16 +1,44 @@
-// Build-time script: injects NEXT_PUBLIC_API_BASE_URL into dashboard.html
-// Runs during Vercel build to replace the localhost default with the production API URL
+// Build-time script: injects NEXT_PUBLIC_API_BASE_URL into HTML files
+// Runs during Vercel build to replace the Railway default with the production API URL
 const fs = require('fs');
 const path = require('path');
 
 const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://web-production-768f7.up.railway.app';
-const htmlPath = path.join(__dirname, 'public', 'index.html');
 
-let html = fs.readFileSync(htmlPath, 'utf8');
-html = html.replace(
-  "window.API_BASE_URL = window.API_BASE_URL || 'https://web-production-768f7.up.railway.app';",
-  `window.API_BASE_URL = '${apiBaseUrl}';`
-);
-fs.writeFileSync(htmlPath, html, 'utf8');
+// Inject into index.html (dashboard)
+const indexPath = path.join(__dirname, 'index.html');
+if (fs.existsSync(indexPath)) {
+    let indexHtml = fs.readFileSync(indexPath, 'utf8');
+    indexHtml = indexHtml.replace(
+        "window.API_BASE_URL = 'https://web-production-768f7.up.railway.app';",
+        `window.API_BASE_URL = '${apiBaseUrl}';`
+    );
+    fs.writeFileSync(indexPath, indexHtml, 'utf8');
+    console.log(`[inject-env] index.html API_BASE_URL set to: ${apiBaseUrl}`);
+}
 
-console.log(`[inject-env] API_BASE_URL set to: ${apiBaseUrl}`);
+// Also try public/index.html (if build copies there)
+const publicIndexPath = path.join(__dirname, 'public', 'index.html');
+if (fs.existsSync(publicIndexPath)) {
+    let pubHtml = fs.readFileSync(publicIndexPath, 'utf8');
+    pubHtml = pubHtml.replace(
+        "window.API_BASE_URL = 'https://web-production-768f7.up.railway.app';",
+        `window.API_BASE_URL = '${apiBaseUrl}';`
+    );
+    fs.writeFileSync(publicIndexPath, pubHtml, 'utf8');
+    console.log(`[inject-env] public/index.html API_BASE_URL set to: ${apiBaseUrl}`);
+}
+
+// Inject into login.html
+const loginPath = path.join(__dirname, 'login.html');
+if (fs.existsSync(loginPath)) {
+    let loginHtml = fs.readFileSync(loginPath, 'utf8');
+    loginHtml = loginHtml.replace(
+        "window.API_BASE_URL || 'https://web-production-768f7.up.railway.app'",
+        `'${apiBaseUrl}'`
+    );
+    fs.writeFileSync(loginPath, loginHtml, 'utf8');
+    console.log(`[inject-env] login.html API_BASE_URL set to: ${apiBaseUrl}`);
+}
+
+console.log(`[inject-env] Done. API_BASE_URL = ${apiBaseUrl}`);

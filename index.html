@@ -37,6 +37,7 @@
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
             border-radius: 12px;
+            position: relative;
         }
 
         .dashboard-header h1 {
@@ -47,6 +48,25 @@
         .dashboard-header p {
             font-size: 1.1em;
             opacity: 0.95;
+        }
+
+        .logout-btn {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(255,255,255,0.2);
+            color: white;
+            border: 1px solid rgba(255,255,255,0.4);
+            padding: 8px 18px;
+            border-radius: 8px;
+            font-size: 0.85em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .logout-btn:hover {
+            background: rgba(255,255,255,0.35);
         }
 
         .filters-section {
@@ -290,14 +310,15 @@
                         }
                     });
                     
-                    const response = await fetch(`https://web-production-768f7.up.railway.app/api/filters?${params}`);
+                    const response = await fetch(`https://web-production-768f7.up.railway.app/api/filters?${params}`, { credentials: 'include' });
+                    if (response.status === 401) { window.location.href = '/login.html'; return; }
                     const data = await response.json();
                     setFilterOptions(data);
                 } catch (error) {
                     console.error('Error fetching filter options:', error);
                 }
             };
-                
+
             //     console.log('Fetching filter options for days_back:', filters.days_back);
             //     try {
             //         const url = `https://web-production-768f7.up.railway.app/api/filters?days_back=${filters.days_back}`;
@@ -322,9 +343,10 @@
                         }
                     });
                     
-                    const response = await fetch(`https://web-production-768f7.up.railway.app/api/deals?${params}`);
+                    const response = await fetch(`https://web-production-768f7.up.railway.app/api/deals?${params}`, { credentials: 'include' });
+                    if (response.status === 401) { window.location.href = '/login.html'; return; }
                     const data = await response.json();
-                    
+
                     setDeals(data);
                 } catch (error) {
                     console.error('Error fetching deals:', error);
@@ -662,6 +684,7 @@
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
             border-radius: 12px;
+            position: relative;
         }
 
         .dashboard-header h1 {
@@ -1231,7 +1254,33 @@
 
     <script type="text/babel">
         const API_BASE_URL = window.API_BASE_URL;
-        const { useState, useEffect } = React;
+        const { useState, useEffect, useRef } = React;
+
+        // ─── Auth: check session on page load, redirect to login if not authenticated ───
+        (async function checkAuth() {
+            try {
+                const resp = await fetch(`${API_BASE_URL}/api/check-auth`, { credentials: 'include' });
+                if (resp.status === 401 || !resp.ok) {
+                    window.location.href = '/login.html';
+                    return;
+                }
+                const data = await resp.json();
+                if (!data.authenticated) {
+                    window.location.href = '/login.html';
+                }
+            } catch (e) {
+                window.location.href = '/login.html';
+            }
+        })();
+
+        async function handleLogout() {
+            try {
+                await fetch(`${API_BASE_URL}/api/logout`, { method: 'POST', credentials: 'include' });
+            } catch (e) {
+                // ignore — redirect regardless
+            }
+            window.location.href = '/login.html';
+        }
 
         function LookalikeCard({ org }) {
             const [contactsOpen, setContactsOpen] = useState(false);
@@ -1267,8 +1316,10 @@
                         const checkResp = await fetch(`${API_BASE_URL}/api/check-clay-search`, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
+                            credentials: 'include',
                             body: JSON.stringify({ domain }),
                         });
+                        if (checkResp.status === 401) { window.location.href = '/login.html'; return; }
                         const checkData = await checkResp.json();
                         console.log('[Clay Search] Cache check result:', checkData);
 
@@ -1293,6 +1344,7 @@
                     const triggerResp = await fetch(`${API_BASE_URL}/api/trigger-clay-search`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
+                        credentials: 'include',
                         body: JSON.stringify({
                             domain,
                             company_name: org.name || '',
@@ -1336,7 +1388,7 @@
                     pollCount++;
                     console.log(`[Clay Poll] #${pollCount} for ${companyKey}`);
                     try {
-                        const resp = await fetch(`${API_BASE_URL}/api/clay-search-status/${companyKey}`);
+                        const resp = await fetch(`${API_BASE_URL}/api/clay-search-status/${companyKey}`, { credentials: 'include' });
                         const data = await resp.json();
 
                         if (data.contacts && data.contacts.length > 0) {
@@ -1373,6 +1425,7 @@
                     const resp = await fetch(`${API_BASE_URL}/api/clay-seed`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
+                        credentials: 'include',
                         body: JSON.stringify({
                             company_name: org.name || '',
                             company_domain: org.website || '',
@@ -1630,7 +1683,8 @@
                     if (lookalikeFilters.city) params.append('filter_city', lookalikeFilters.city);
                     if (lookalikeFilters.state) params.append('filter_state', lookalikeFilters.state);
 
-                    const response = await fetch(`${API_BASE_URL}/api/lookalikes?${params}`);
+                    const response = await fetch(`${API_BASE_URL}/api/lookalikes?${params}`, { credentials: 'include' });
+                    if (response.status === 401) { window.location.href = '/login.html'; return; }
                     const data = await response.json();
                     if (data.error) {
                         setLookalikes({ error: data.error });
@@ -1912,7 +1966,8 @@
                         }
                     });
 
-                    const response = await fetch(`${API_BASE_URL}/api/filters?${params}`);
+                    const response = await fetch(`${API_BASE_URL}/api/filters?${params}`, { credentials: 'include' });
+                    if (response.status === 401) { window.location.href = '/login.html'; return; }
                     const data = await response.json();
                     setFilterOptions(data);
                 } catch (error) {
@@ -1933,7 +1988,8 @@
                         }
                     });
 
-                    const response = await fetch(`${API_BASE_URL}/api/deals?${params}`);
+                    const response = await fetch(`${API_BASE_URL}/api/deals?${params}`, { credentials: 'include' });
+                    if (response.status === 401) { window.location.href = '/login.html'; return; }
                     const data = await response.json();
 
                     setDeals(data);
@@ -1965,6 +2021,7 @@
             return (
                 <div className="dashboard">
                     <header className="dashboard-header">
+                        <button className="logout-btn" onClick={handleLogout}>Sign Out</button>
                         <h1>📊 Deals Dashboard</h1>
                         <p>Find deals and discover lookalike companies</p>
                     </header>

@@ -71,6 +71,8 @@ Vercel (Frontend)              Railway (Backend)                    Clay
    | `OPENAI_API_KEY` | OpenAI API key (optional) |
    | `CLAY_WEBHOOK_URL` | Clay webhook URL (optional) |
    | `ALLOWED_ORIGINS` | Your Vercel URL, e.g. `https://your-app.vercel.app` |
+   | `SECRET_KEY` | Session signing key (generate: `python -c "import secrets; print(secrets.token_hex(32))"`) |
+   | `AUTH_USERS` | Comma-separated `email:passwordhash` pairs (see [Authentication](#authentication)) |
    | `FLASK_DEBUG` | `false` |
 
 4. Railway auto-detects `railway.json` and deploys with gunicorn
@@ -103,6 +105,55 @@ Vercel (Frontend)              Railway (Backend)                    Clay
 - [ ] Clay seed buttons work (if `CLAY_WEBHOOK_URL` is set)
 - [ ] Clay contact search triggers and polls correctly (if `CLAY_WEBHOOK_URL` is set)
 - [ ] Railway `ALLOWED_ORIGINS` includes your Vercel domain
+- [ ] Login page shows at root URL and sign-in works
+- [ ] Dashboard redirects to login when not authenticated
+
+## Authentication
+
+The dashboard uses Flask session-based authentication with secure cookies.
+
+### Setup
+
+1. **Generate a password hash** for each user:
+
+   ```bash
+   python generate_password.py mypassword
+   ```
+
+   This outputs a `pbkdf2:sha256:...` hash.
+
+2. **Set `AUTH_USERS`** in Railway with comma-separated `email:hash` pairs:
+
+   ```
+   AUTH_USERS=admin@company.com:pbkdf2:sha256:600000:...,user@company.com:pbkdf2:sha256:600000:...
+   ```
+
+   Note: split on the **first** colon only — password hashes contain colons.
+
+3. **Set `SECRET_KEY`** in Railway for stable session signing:
+
+   ```bash
+   python -c "import secrets; print(secrets.token_hex(32))"
+   ```
+
+   Without a stable key, sessions reset on every server restart.
+
+### How It Works
+
+- `POST /api/login` — validates credentials, sets a signed session cookie (24h expiry)
+- `GET /api/check-auth` — frontend calls this on page load to verify session
+- `POST /api/logout` — clears the session
+- All API routes require a valid session (`@require_auth` decorator)
+- `/health` and `/api/clay-contact-result` are **not** protected (monitoring + server-to-server callback)
+- Rate limiting: 5 login attempts per IP per 60 seconds
+
+### Cross-Origin Cookies
+
+Since the frontend (Vercel) and backend (Railway) are on different domains, cookies use:
+- `SameSite=None` — required for cross-origin cookie sending
+- `Secure=True` — cookies only sent over HTTPS
+- `HttpOnly=True` — JavaScript cannot read the session cookie
+- Frontend fetch calls include `credentials: 'include'`
 
 ## MCP Server Mode
 
