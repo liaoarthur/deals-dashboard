@@ -1537,18 +1537,27 @@
                         )}
 
                         {clayContacts && clayContacts.length > 0 && (
-                            <div>
+                            <div className="contacts-list">
+                                <div className="contact-row" style={{fontWeight: 700, fontSize: '0.78em', color: '#999', background: 'transparent', border: 'none'}}>
+                                    <span>Name</span>
+                                    <span>Title</span>
+                                    <span>Email(s)</span>
+                                    <span>Phone(s)</span>
+                                    <span>Links</span>
+                                </div>
                                 {clayContacts.map((c, idx) => (
-                                    <div key={idx} className="clay-contact-card" style={{padding: '8px 12px', marginBottom: 6}}>
-                                        <h6 style={{fontSize: '0.85em', margin: '0 0 4px 0'}}>
-                                            {c.name || 'Unknown'}{c.title ? ` — ${c.title}` : ''}
-                                        </h6>
-                                        <div className="clay-contact-meta" style={{fontSize: '0.8em'}}>
-                                            {c.email && <span>📧 <a href={`mailto:${c.email}`}>{c.email}</a></span>}
-                                            {c.phone && <span>📞 {c.phone}</span>}
-                                            {c.linkedin && <span>🔗 <a href={c.linkedin.startsWith('http') ? c.linkedin : `https://${c.linkedin}`} target="_blank" rel="noopener noreferrer">LinkedIn</a></span>}
-                                            {c.first_seen && <span className="first-seen">First found: {new Date(c.first_seen).toLocaleDateString()}</span>}
-                                        </div>
+                                    <div key={idx} className="contact-row">
+                                        <span className="contact-name">{c.name || '—'}</span>
+                                        <span className="contact-title">{c.title || '—'}</span>
+                                        <span>
+                                            {c.email ? <a href={`mailto:${c.email}`}>{c.email}</a> : '—'}
+                                        </span>
+                                        <span>{c.phone || '—'}</span>
+                                        <span>
+                                            {c.linkedin ? (
+                                                <a href={c.linkedin.startsWith('http') ? c.linkedin : `https://${c.linkedin}`} target="_blank" rel="noopener noreferrer">LinkedIn</a>
+                                            ) : '—'}
+                                        </span>
                                     </div>
                                 ))}
                             </div>

@@ -2185,27 +2185,17 @@ def clay_contact_result():
     The company_key in the payload is the DOMAIN that was sent to Clay.
     Clay must pass it back unchanged so we can match contacts to the company.
 
-    Supports two payload formats:
-
-    1. Batch format (multiple contacts at once):
+    Clay sends one row per contact with these keys:
        {
          "company_key": "acme.com",
-         "contacts": [
-           {"name": "...", "email": "...", "phone": "...", "title": "...", "linkedin": "..."},
-           ...
-         ]
+         "full_name": "Dr. Jane Smith",
+         "title": "Chief Medical Officer",
+         "email": "jane@acme.com",
+         "phone": "555-0123",
+         "linkedin": "https://linkedin.com/in/janesmith"
        }
 
-    2. Single-contact format (one contact per callback):
-       {
-         "company_key": "acme.com",
-         "name": "...",
-         "email": "...",
-         "phone": "...",
-         "title": "...",
-         "linkedin": "..."
-       }
-
+    Fields are normalized to internal names: full_name → name.
     Contacts are deduplicated by email or LinkedIn URL before merging.
     """
     data = request.get_json()
@@ -2224,19 +2214,43 @@ def clay_contact_result():
     print(f"  Raw payload: {json.dumps(data, indent=2, default=str)}", file=sys.stderr)
     print(f"{'='*60}\n", file=sys.stderr)
 
-    # Parse contacts from either batch or single format
+    # Map Clay field names → internal field names
+    # Clay sends: full_name, title, email, phone, linkedin
+    # We store:   name,      title, email, phone, linkedin
+    CLAY_FIELD_MAP = {
+        'full_name': 'name',
+        'title': 'title',
+        'email': 'email',
+        'phone': 'phone',
+        'linkedin': 'linkedin',
+        # Also accept our internal names in case of direct API calls
+        'name': 'name',
+    }
+
+    def _normalize_contact(raw):
+        """Convert a Clay contact dict to our internal format."""
+        contact = {}
+        for clay_key, internal_key in CLAY_FIELD_MAP.items():
+            val = raw.get(clay_key)
+            if val and str(val).strip():
+                # Don't overwrite if we already have this field (name vs full_name)
+                if internal_key not in contact:
+                    contact[internal_key] = str(val).strip()
+        return contact
+
+    # Parse contacts — Clay sends one row per webhook call (single-contact format)
     incoming_contacts = []
     if 'contacts' in data and isinstance(data['contacts'], list):
-        # Batch format: { company_key, contacts: [...] }
-        incoming_contacts = data['contacts']
+        # Batch format (rare): { company_key, contacts: [...] }
+        for raw in data['contacts']:
+            c = _normalize_contact(raw)
+            if c:
+                incoming_contacts.append(c)
     else:
-        # Single-contact format: { company_key, name, email, phone, title, linkedin }
-        single = {}
-        for field in ['name', 'email', 'phone', 'title', 'linkedin']:
-            if data.get(field):
-                single[field] = data[field]
-        if single:
-            incoming_contacts = [single]
+        # Single-contact format (standard Clay row): { company_key, full_name, title, ... }
+        c = _normalize_contact(data)
+        if c:
+            incoming_contacts = [c]
 
     if not incoming_contacts:
         print(f"[CLAY CALLBACK] No contacts in payload for domain={company_key}", file=sys.stderr)

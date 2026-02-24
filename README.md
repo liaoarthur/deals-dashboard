@@ -149,37 +149,20 @@ The Clay Contact Search feature lets users search for contacts at a company via 
    | **Method** | `POST` |
    | **Headers** | `Content-Type: application/json` |
 
-4. **Configure the callback body** — the `company_key` field is critical and must be passed through from the webhook input:
+4. **Configure the callback body** — the `company_key` must be passed through from the webhook input (it's the domain):
 
-   **Single contact per row (recommended):**
    ```json
    {
-     "company_key": "{{company_key}}",
-     "name": "{{Full Name}}",
-     "email": "{{Work Email}}",
-     "phone": "{{Phone Number}}",
+     "company_key": "{{Search Domain}}",
+     "full_name": "{{Full Name}}",
      "title": "{{Job Title}}",
-     "linkedin": "{{LinkedIn URL}}"
+     "phone": "{{Mobile Phone}}",
+     "linkedin": "{{LinkedIn Profile}}",
+     "email": "{{Work Email}}"
    }
    ```
 
-   **Batch format (if sending multiple contacts at once):**
-   ```json
-   {
-     "company_key": "{{company_key}}",
-     "contacts": [
-       {
-         "name": "{{Full Name}}",
-         "email": "{{Work Email}}",
-         "phone": "{{Phone Number}}",
-         "title": "{{Job Title}}",
-         "linkedin": "{{LinkedIn URL}}"
-       }
-     ]
-   }
-   ```
-
-   Replace `{{variable}}` with your actual Clay column references.
+   Replace `{{variable}}` with your actual Clay column references. The backend maps `full_name` → `name` internally.
 
 5. **Set the `CLAY_WEBHOOK_URL` environment variable** in Railway to your Clay table's webhook URL (the URL Clay gives you for the HTTP API trigger).
 
