@@ -1239,6 +1239,134 @@
             const [claySending, setClaySending] = useState(false);
             const contacts = org.contacts || [];
 
+            // ── Clay Contact Search state (per-lookalike company) ──
+            const [clayContacts, setClayContacts] = useState(null);
+            const [loadingClaySearch, setLoadingClaySearch] = useState(false);
+            const [showRerunPrompt, setShowRerunPrompt] = useState(false);
+            const [cachedSearchResult, setCachedSearchResult] = useState(null);
+            const [claySearchError, setClaySearchError] = useState(null);
+            const clayPollRef = React.useRef(null);
+
+            // Clay search uses the lookalike company's website as the key
+            const searchClayContacts = async (force = false) => {
+                const domain = org.website;
+                if (!domain) {
+                    setClaySearchError('No website/domain on this company — cannot search Clay');
+                    return;
+                }
+
+                setLoadingClaySearch(true);
+                setClaySearchError(null);
+                setShowRerunPrompt(false);
+                console.log(`[Clay Search] Starting for domain="${domain}" (${org.name}), force=${force}`);
+
+                try {
+                    if (!force) {
+                        // Step 1: Check cache
+                        console.log('[Clay Search] Checking cache...');
+                        const checkResp = await fetch(`${API_BASE_URL}/api/check-clay-search`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ domain }),
+                        });
+                        const checkData = await checkResp.json();
+                        console.log('[Clay Search] Cache check result:', checkData);
+
+                        if (checkData.found && checkData.status === 'complete') {
+                            console.log(`[Clay Search] Cache HIT — ${checkData.contact_count} contacts`);
+                            setClayContacts(checkData.contacts || []);
+                            setCachedSearchResult(checkData);
+                            setShowRerunPrompt(true);
+                            setLoadingClaySearch(false);
+                            return;
+                        }
+
+                        if (checkData.found && checkData.status === 'searching') {
+                            console.log('[Clay Search] Already in progress, polling...');
+                            startClayPolling(checkData.company_key);
+                            return;
+                        }
+                    }
+
+                    // Step 2: Trigger new search
+                    console.log('[Clay Search] Triggering new search via Clay webhook...');
+                    const triggerResp = await fetch(`${API_BASE_URL}/api/trigger-clay-search`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            domain,
+                            company_name: org.name || '',
+                            state: org.state || '',
+                            city: org.city || '',
+                            specialty: org.specialty || '',
+                            force,
+                        }),
+                    });
+                    const triggerData = await triggerResp.json();
+                    console.log('[Clay Search] Trigger result:', triggerData);
+
+                    if (triggerData.error) {
+                        setClaySearchError(triggerData.error);
+                        setLoadingClaySearch(false);
+                        return;
+                    }
+
+                    if (triggerData.already_cached) {
+                        searchClayContacts(false);
+                        return;
+                    }
+
+                    // Step 3: Poll for results
+                    console.log(`[Clay Search] Polling key=${triggerData.company_key}`);
+                    startClayPolling(triggerData.company_key);
+
+                } catch (e) {
+                    console.error('[Clay Search] Error:', e);
+                    setClaySearchError('Failed to search contacts');
+                    setLoadingClaySearch(false);
+                }
+            };
+
+            const startClayPolling = (companyKey) => {
+                if (clayPollRef.current) clearInterval(clayPollRef.current);
+                let pollCount = 0;
+                const maxPolls = 40; // 40 × 3s = 2 min max
+
+                clayPollRef.current = setInterval(async () => {
+                    pollCount++;
+                    console.log(`[Clay Poll] #${pollCount} for ${companyKey}`);
+                    try {
+                        const resp = await fetch(`${API_BASE_URL}/api/clay-search-status/${companyKey}`);
+                        const data = await resp.json();
+
+                        if (data.contacts && data.contacts.length > 0) {
+                            setClayContacts(data.contacts);
+                        }
+
+                        if (data.status === 'complete' || pollCount >= maxPolls) {
+                            console.log(`[Clay Poll] Done — ${(data.contacts || []).length} contacts`);
+                            clearInterval(clayPollRef.current);
+                            clayPollRef.current = null;
+                            setClayContacts(data.contacts || []);
+                            setCachedSearchResult(data);
+                            setShowRerunPrompt(true);
+                            setLoadingClaySearch(false);
+                        }
+                    } catch (e) {
+                        console.error('[Clay Poll] Error:', e);
+                        clearInterval(clayPollRef.current);
+                        clayPollRef.current = null;
+                        setClaySearchError('Polling failed — try again');
+                        setLoadingClaySearch(false);
+                    }
+                }, 3000);
+            };
+
+            // Cleanup poll on unmount
+            React.useEffect(() => {
+                return () => { if (clayPollRef.current) clearInterval(clayPollRef.current); };
+            }, []);
+
             const seedClayCompany = async () => {
                 setClaySending(true);
                 try {
@@ -1367,6 +1495,69 @@
                             )}
                         </>
                     )}
+
+                    {/* ── Clay Contact Search (per lookalike company) ──── */}
+                    <div className="clay-search-section" style={{borderTop: '1px dashed #e0e0e0', marginTop: 12, paddingTop: 10}}>
+                        <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8}}>
+                            <span style={{fontSize: '0.85em', fontWeight: 600, color: '#555'}}>🧱 Clay Contacts</span>
+                            <button
+                                className="clay-search-btn"
+                                style={{padding: '5px 12px', fontSize: '0.8em'}}
+                                onClick={() => searchClayContacts(false)}
+                                disabled={loadingClaySearch || !org.website}
+                                title={org.website ? `Search Clay for contacts at ${org.website}` : 'No website — cannot search'}
+                            >
+                                {loadingClaySearch ? '⏳...' : '🔍 Search'}
+                            </button>
+                        </div>
+
+                        {claySearchError && (
+                            <div style={{color: '#e74c3c', fontSize: '0.8em', marginBottom: 6}}>⚠️ {claySearchError}</div>
+                        )}
+
+                        {showRerunPrompt && cachedSearchResult && (
+                            <div className="clay-rerun-prompt" style={{padding: '8px 12px', fontSize: '0.8em'}}>
+                                <span>
+                                    📋 {new Date(cachedSearchResult.searched_at).toLocaleDateString()} — {(clayContacts || []).length} contact{(clayContacts || []).length !== 1 ? 's' : ''}
+                                </span>
+                                <button onClick={() => searchClayContacts(true)} style={{padding: '4px 10px', fontSize: '0.8em'}}>
+                                    🔄 Re-run
+                                </button>
+                            </div>
+                        )}
+
+                        {loadingClaySearch && !clayContacts && (
+                            <div style={{fontSize: '0.8em', color: '#667eea', fontWeight: 600}}>🔄 Searching Clay...</div>
+                        )}
+
+                        {loadingClaySearch && clayContacts && clayContacts.length > 0 && (
+                            <div style={{fontSize: '0.8em', color: '#667eea', marginBottom: 4}}>
+                                Found {clayContacts.length} so far, still searching...
+                            </div>
+                        )}
+
+                        {clayContacts && clayContacts.length > 0 && (
+                            <div>
+                                {clayContacts.map((c, idx) => (
+                                    <div key={idx} className="clay-contact-card" style={{padding: '8px 12px', marginBottom: 6}}>
+                                        <h6 style={{fontSize: '0.85em', margin: '0 0 4px 0'}}>
+                                            {c.name || 'Unknown'}{c.title ? ` — ${c.title}` : ''}
+                                        </h6>
+                                        <div className="clay-contact-meta" style={{fontSize: '0.8em'}}>
+                                            {c.email && <span>📧 <a href={`mailto:${c.email}`}>{c.email}</a></span>}
+                                            {c.phone && <span>📞 {c.phone}</span>}
+                                            {c.linkedin && <span>🔗 <a href={c.linkedin.startsWith('http') ? c.linkedin : `https://${c.linkedin}`} target="_blank" rel="noopener noreferrer">LinkedIn</a></span>}
+                                            {c.first_seen && <span className="first-seen">First found: {new Date(c.first_seen).toLocaleDateString()}</span>}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+
+                        {clayContacts && clayContacts.length === 0 && !loadingClaySearch && (
+                            <div style={{fontSize: '0.8em', color: '#999'}}>No contacts found from Clay</div>
+                        )}
+                    </div>
                 </div>
             );
         }
@@ -1383,14 +1574,6 @@
                 city: '',
                 state: ''
             });
-
-            // ── Clay Contact Search state ──
-            const [clayContacts, setClayContacts] = useState(null);       // null = not searched yet, [] = searched but empty
-            const [loadingClaySearch, setLoadingClaySearch] = useState(false);
-            const [showRerunPrompt, setShowRerunPrompt] = useState(false);
-            const [cachedSearchResult, setCachedSearchResult] = useState(null);
-            const [claySearchError, setClaySearchError] = useState(null);
-            const clayPollRef = React.useRef(null);  // interval ID for polling
 
             // Re-fetch when filters change (only after initial load)
             useEffect(() => {
@@ -1453,152 +1636,6 @@
                     setLoadingLookalikes(false);
                 }
             };
-
-            // ── Clay Contact Search functions ──────────────────────────
-            // Flow: check cache → if miss, trigger search → poll for results
-
-            const searchClayContacts = async (force = false) => {
-                const effectiveState = deal.billing_state || deal.lc_us_state;
-                const effectiveCity = deal.billing_city || deal.lc_city;
-                const companyName = deal.associated_company_name;
-
-                if (!companyName || !effectiveState) {
-                    setClaySearchError('Missing company name or state on this deal — cannot search Clay');
-                    return;
-                }
-
-                setLoadingClaySearch(true);
-                setClaySearchError(null);
-                setShowRerunPrompt(false);
-                console.log(`[Clay Search] Starting search for "${companyName}" in ${effectiveState}, force=${force}`);
-
-                try {
-                    if (!force) {
-                        // Step 1: Check if we already have cached results
-                        console.log('[Clay Search] Checking cache...');
-                        const checkResp = await fetch(`${API_BASE_URL}/api/check-clay-search`, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                company_name: companyName,
-                                state: effectiveState,
-                                city: effectiveCity || '',
-                            }),
-                        });
-                        const checkData = await checkResp.json();
-                        console.log('[Clay Search] Cache check result:', checkData);
-
-                        if (checkData.found && checkData.status === 'complete') {
-                            // Cached results exist — show them immediately with re-run prompt
-                            console.log(`[Clay Search] Cache HIT — ${checkData.contact_count} contacts`);
-                            setClayContacts(checkData.contacts || []);
-                            setCachedSearchResult(checkData);
-                            setShowRerunPrompt(true);
-                            setLoadingClaySearch(false);
-                            return;
-                        }
-
-                        if (checkData.found && checkData.status === 'searching') {
-                            // Search already in progress — start polling
-                            console.log('[Clay Search] Search already in progress, starting poll...');
-                            startClayPolling(checkData.company_key);
-                            return;
-                        }
-                    }
-
-                    // Step 2: Trigger a new Clay search
-                    console.log('[Clay Search] Triggering new search via Clay webhook...');
-                    const triggerResp = await fetch(`${API_BASE_URL}/api/trigger-clay-search`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            company_name: companyName,
-                            state: effectiveState,
-                            city: effectiveCity || '',
-                            specialty: deal.specialty_mcp_use || '',
-                            force: force,
-                        }),
-                    });
-                    const triggerData = await triggerResp.json();
-                    console.log('[Clay Search] Trigger result:', triggerData);
-
-                    if (triggerData.error) {
-                        setClaySearchError(triggerData.error);
-                        setLoadingClaySearch(false);
-                        return;
-                    }
-
-                    if (triggerData.already_cached) {
-                        // Became cached between check and trigger — re-check
-                        console.log('[Clay Search] Became cached between check and trigger, re-checking...');
-                        searchClayContacts(false);
-                        return;
-                    }
-
-                    // Step 3: Start polling for results
-                    console.log(`[Clay Search] Search triggered, polling key=${triggerData.company_key}`);
-                    startClayPolling(triggerData.company_key);
-
-                } catch (e) {
-                    console.error('[Clay Search] Error:', e);
-                    setClaySearchError('Failed to search contacts — check console for details');
-                    setLoadingClaySearch(false);
-                }
-            };
-
-            const startClayPolling = (companyKey) => {
-                // Clear any existing poll interval
-                if (clayPollRef.current) clearInterval(clayPollRef.current);
-
-                let pollCount = 0;
-                const maxPolls = 40; // 40 × 3s = 2 minutes max wait
-
-                clayPollRef.current = setInterval(async () => {
-                    pollCount++;
-                    console.log(`[Clay Poll] Poll #${pollCount} for key=${companyKey}`);
-
-                    try {
-                        const resp = await fetch(`${API_BASE_URL}/api/clay-search-status/${companyKey}`);
-                        const data = await resp.json();
-
-                        // Progressive update: show contacts found so far
-                        if (data.contacts && data.contacts.length > 0) {
-                            setClayContacts(data.contacts);
-                        }
-
-                        // Stop polling when complete or timeout
-                        if (data.status === 'complete' || pollCount >= maxPolls) {
-                            console.log(`[Clay Poll] Done — status=${data.status}, contacts=${(data.contacts || []).length}`);
-                            clearInterval(clayPollRef.current);
-                            clayPollRef.current = null;
-                            setClayContacts(data.contacts || []);
-                            setCachedSearchResult(data);
-                            setShowRerunPrompt(true);
-                            setLoadingClaySearch(false);
-
-                            if (pollCount >= maxPolls && data.status !== 'complete') {
-                                console.warn('[Clay Poll] Timed out waiting for Clay results');
-                            }
-                        }
-                    } catch (e) {
-                        console.error('[Clay Poll] Error:', e);
-                        clearInterval(clayPollRef.current);
-                        clayPollRef.current = null;
-                        setClaySearchError('Polling for results failed — try again');
-                        setLoadingClaySearch(false);
-                    }
-                }, 3000); // Poll every 3 seconds
-            };
-
-            // Cleanup: stop polling when component unmounts (card collapses)
-            React.useEffect(() => {
-                return () => {
-                    if (clayPollRef.current) {
-                        console.log('[Clay Poll] Cleaning up poll interval');
-                        clearInterval(clayPollRef.current);
-                    }
-                };
-            }, []);
 
             // Filter options come from the server (full unfiltered set)
             const filterOpts = (lookalikes && lookalikes.filter_options) || {};
@@ -1831,97 +1868,6 @@
                             )}
                         </div>
 
-                        {/* ── Clay Contact Search Section ────────────────────── */}
-                        <div className="clay-search-section">
-                            <div className="clay-search-header">
-                                <h4>🧱 Clay Contact Search</h4>
-                                <button
-                                    className="clay-search-btn"
-                                    onClick={() => searchClayContacts(false)}
-                                    disabled={loadingClaySearch}
-                                >
-                                    {loadingClaySearch ? '⏳ Searching...' : '🔍 Search Contacts'}
-                                </button>
-                            </div>
-
-                            {/* Error message */}
-                            {claySearchError && (
-                                <div style={{color: '#e74c3c', fontSize: '0.9em', marginBottom: 10, padding: '8px 12px', background: '#fdecea', borderRadius: 6}}>
-                                    ⚠️ {claySearchError}
-                                </div>
-                            )}
-
-                            {/* Re-run prompt — shown when cached results are displayed */}
-                            {showRerunPrompt && cachedSearchResult && (
-                                <div className="clay-rerun-prompt">
-                                    <span>
-                                        📋 Searched on {new Date(cachedSearchResult.searched_at).toLocaleDateString()}.
-                                        Found {(clayContacts || []).length} contact{(clayContacts || []).length !== 1 ? 's' : ''}.
-                                    </span>
-                                    <button onClick={() => searchClayContacts(true)}>
-                                        🔄 Re-run (uses Clay credits)
-                                    </button>
-                                </div>
-                            )}
-
-                            {/* Loading state — initial (no contacts yet) */}
-                            {loadingClaySearch && !clayContacts && (
-                                <div className="lookalike-placeholder loading">
-                                    🔄 Searching Clay for contacts...
-                                </div>
-                            )}
-
-                            {/* Loading state — progressive (contacts arriving) */}
-                            {loadingClaySearch && clayContacts && clayContacts.length > 0 && (
-                                <div style={{fontSize: '0.85em', color: '#667eea', marginBottom: 8, padding: '6px 10px', background: '#f0f2ff', borderRadius: 6}}>
-                                    Found {clayContacts.length} contact{clayContacts.length !== 1 ? 's' : ''} so far, still searching...
-                                </div>
-                            )}
-
-                            {/* Contact cards */}
-                            {clayContacts && clayContacts.length > 0 && (
-                                <div>
-                                    {clayContacts.map((c, idx) => (
-                                        <div key={idx} className="clay-contact-card">
-                                            <h6>
-                                                {c.name || 'Unknown'}
-                                                {c.title ? ` — ${c.title}` : ''}
-                                            </h6>
-                                            <div className="clay-contact-meta">
-                                                {c.email && (
-                                                    <span>📧 <a href={`mailto:${c.email}`}>{c.email}</a></span>
-                                                )}
-                                                {c.phone && (
-                                                    <span>📞 {c.phone}</span>
-                                                )}
-                                                {c.linkedin && (
-                                                    <span>🔗 <a href={c.linkedin.startsWith('http') ? c.linkedin : `https://${c.linkedin}`} target="_blank" rel="noopener noreferrer">LinkedIn</a></span>
-                                                )}
-                                                {c.first_seen && (
-                                                    <span className="first-seen">
-                                                        First found: {new Date(c.first_seen).toLocaleDateString()}
-                                                    </span>
-                                                )}
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-
-                            {/* Empty state — searched but no contacts found */}
-                            {clayContacts && clayContacts.length === 0 && !loadingClaySearch && (
-                                <div className="lookalike-placeholder">
-                                    No contacts found from Clay for this company
-                                </div>
-                            )}
-
-                            {/* Initial placeholder — not yet searched */}
-                            {clayContacts === null && !loadingClaySearch && !claySearchError && (
-                                <div className="lookalike-placeholder">
-                                    Click "Search Contacts" to find contacts via Clay
-                                </div>
-                            )}
-                        </div>
                     </div>
                 </div>
             );

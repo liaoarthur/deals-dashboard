@@ -96,21 +96,20 @@ _definitive_specialties_cache = {
 _definitive_specialties_ttl = 86400  # 24 hours
 
 # ─── Clay Contact Search Cache ─────────────────────────────────────────────────
-# Stores contacts returned from Clay searches, keyed by a deterministic company key.
-# Supports deduplication by email/LinkedIn and optional Redis persistence.
+# Stores contacts returned from Clay searches, keyed by the lookalike company's
+# domain (website). The domain is sent to Clay in the webhook and Clay sends it
+# back in the callback, so it's the natural key for matching contacts to companies.
 _clay_search_cache = {}
 _clay_search_ttl = 2592000  # 30 days
 
 
-def get_company_key(company_name, state, city=""):
+def get_company_key(domain):
     """
-    Generate a deterministic cache key from company identifiers.
-    Normalizes inputs (lowercase, strip whitespace) so the same company
-    always maps to the same key regardless of formatting.
-    Returns an MD5 hex string.
+    Use the raw website/domain from Definitive Healthcare as the cache key.
+    Only strips surrounding whitespace — no other normalization.
+    Whatever Databricks gives us is what Clay gets and what we key on.
     """
-    normalized = f"{(company_name or '').strip().lower()}|{(state or '').strip().lower()}|{(city or '').strip().lower()}"
-    return hashlib.md5(normalized.encode()).hexdigest()
+    return (domain or '').strip()
 
 
 def _save_clay_cache_to_redis(company_key, data):
@@ -2012,38 +2011,38 @@ def clay_seed():
 
 # ─── Clay Contact Search Endpoints ─────────────────────────────────────────────
 # These endpoints implement a caching layer for Clay contact searches.
+# The company_key is the lookalike company's DOMAIN (website), normalized.
+# This is what gets sent to Clay in the webhook, and what Clay sends back.
+#
 # Flow: check-cache → trigger-search → Clay calls back → poll for results
 #
-# 1. Frontend POSTs to /api/check-clay-search to see if we already have results
-# 2. If not cached, frontend POSTs to /api/trigger-clay-search to kick off a Clay search
+# 1. Frontend POSTs to /api/check-clay-search with { domain } to check cache
+# 2. If not cached, frontend POSTs to /api/trigger-clay-search to kick off Clay
 # 3. Clay enriches the data and POSTs contacts back to /api/clay-contact-result
-# 4. Frontend polls /api/clay-search-status/<key> every 3s until status="complete"
+# 4. Frontend polls /api/clay-search-status/<domain> every 3s until status="complete"
 
 @flask_app.route('/api/check-clay-search', methods=['POST'])
 def check_clay_search():
     """
-    Check if a company has been searched before in Clay.
+    Check if a lookalike company has been searched before in Clay.
     Returns cached contacts if found, or {found: false} if not.
 
     POST body (JSON):
-    - company_name (required): name of the company
-    - state (required): state abbreviation
-    - city (optional): city name
+    - domain (required): the lookalike company's website/domain
     """
     data = request.get_json()
     if not data:
         return jsonify({'error': 'Request body is required'}), 400
 
-    company_name = (data.get('company_name') or '').strip()
-    state = (data.get('state') or '').strip()
+    domain = (data.get('domain') or '').strip()
+    if not domain:
+        return jsonify({'error': 'domain is required'}), 400
 
-    if not company_name or not state:
-        return jsonify({'error': 'company_name and state are required'}), 400
+    company_key = get_company_key(domain)
+    if not company_key:
+        return jsonify({'error': 'Invalid domain'}), 400
 
-    city = (data.get('city') or '').strip()
-    company_key = get_company_key(company_name, state, city)
-
-    print(f"[CLAY CHECK] Checking cache for key={company_key} ({company_name}, {state}, {city})", file=sys.stderr)
+    print(f"[CLAY CHECK] Checking cache for domain={company_key}", file=sys.stderr)
 
     # Look up in-memory cache, then Redis
     entry = _get_clay_search(company_key)
@@ -2059,7 +2058,7 @@ def check_clay_search():
             'contacts': entry.get('contacts', [])
         })
     else:
-        print(f"[CLAY CHECK] Cache MISS", file=sys.stderr)
+        print(f"[CLAY CHECK] Cache MISS for domain={company_key}", file=sys.stderr)
         return jsonify({
             'found': False,
             'company_key': company_key
@@ -2069,13 +2068,14 @@ def check_clay_search():
 @flask_app.route('/api/trigger-clay-search', methods=['POST'])
 def trigger_clay_search():
     """
-    Trigger a new Clay contact search for a company.
-    Sends company data to the Clay webhook, which will enrich it and POST
-    contacts back to /api/clay-contact-result.
+    Trigger a new Clay contact search for a lookalike company.
+    Sends company data to the Clay webhook with the domain as company_key.
+    Clay will enrich it and POST contacts back to /api/clay-contact-result.
 
     POST body (JSON):
-    - company_name (required): name of the company
-    - state (required): state abbreviation
+    - domain (required): the lookalike company's website/domain (used as key)
+    - company_name (optional): company name for context
+    - state (optional): state abbreviation
     - city (optional): city name
     - specialty (optional): medical specialty
     - force (optional, bool): if true, re-run even if cached results exist
@@ -2087,23 +2087,25 @@ def trigger_clay_search():
     if not data:
         return jsonify({'error': 'Request body is required'}), 400
 
+    domain = (data.get('domain') or '').strip()
+    if not domain:
+        return jsonify({'error': 'domain is required'}), 400
+
+    company_key = get_company_key(domain)
+    if not company_key:
+        return jsonify({'error': 'Invalid domain'}), 400
+
     company_name = (data.get('company_name') or '').strip()
     state = (data.get('state') or '').strip()
-
-    if not company_name or not state:
-        return jsonify({'error': 'company_name and state are required'}), 400
-
     city = (data.get('city') or '').strip()
     specialty = (data.get('specialty') or '').strip()
     force = data.get('force', False)
-
-    company_key = get_company_key(company_name, state, city)
 
     # If not forcing, check if we already have results
     if not force:
         existing = _get_clay_search(company_key)
         if existing and existing.get('status') == 'complete':
-            print(f"[CLAY TRIGGER] Already cached for key={company_key}, returning cached flag", file=sys.stderr)
+            print(f"[CLAY TRIGGER] Already cached for domain={company_key}, returning cached flag", file=sys.stderr)
             return jsonify({
                 'already_cached': True,
                 'company_key': company_key,
@@ -2113,6 +2115,7 @@ def trigger_clay_search():
     # Create/reset cache entry with "searching" status
     now = datetime.utcnow().isoformat()
     cache_entry = {
+        'domain': company_key,
         'company_name': company_name,
         'state': state,
         'city': city,
@@ -2124,21 +2127,21 @@ def trigger_clay_search():
     _clay_search_cache[company_key] = cache_entry
     _save_clay_cache_to_redis(company_key, cache_entry)
 
-    # Build payload for Clay webhook — include company_key so Clay can pass it back
+    # Build payload for Clay webhook — company_key IS the domain
+    # Clay must pass company_key back unchanged in its callback
     payload = {
         'company_key': company_key,
         'company_name': company_name,
+        'domain': company_key,
         'state': state,
         'city': city,
         'specialty': specialty,
         'source': 'clay_contact_search',
-        # Tell Clay where to send results back
-        'callback_url': 'https://web-production-768f7.up.railway.app/api/clay-contact-result'
     }
 
     print(f"\n{'='*60}", file=sys.stderr)
     print(f"[CLAY TRIGGER] Sending search request to Clay webhook:", file=sys.stderr)
-    print(f"  company_key: {company_key}", file=sys.stderr)
+    print(f"  company_key (domain): {company_key}", file=sys.stderr)
     print(f"  payload: {json.dumps(payload, indent=2)}", file=sys.stderr)
     print(f"{'='*60}\n", file=sys.stderr)
 
@@ -2179,11 +2182,14 @@ def clay_contact_result():
     Receive enriched contacts from Clay's HTTP API callback.
     Called by Clay after it processes a contact search request.
 
+    The company_key in the payload is the DOMAIN that was sent to Clay.
+    Clay must pass it back unchanged so we can match contacts to the company.
+
     Supports two payload formats:
 
     1. Batch format (multiple contacts at once):
        {
-         "company_key": "abc123...",
+         "company_key": "acme.com",
          "contacts": [
            {"name": "...", "email": "...", "phone": "...", "title": "...", "linkedin": "..."},
            ...
@@ -2192,7 +2198,7 @@ def clay_contact_result():
 
     2. Single-contact format (one contact per callback):
        {
-         "company_key": "abc123...",
+         "company_key": "acme.com",
          "name": "...",
          "email": "...",
          "phone": "...",
@@ -2201,18 +2207,20 @@ def clay_contact_result():
        }
 
     Contacts are deduplicated by email or LinkedIn URL before merging.
-    The company_key MUST match one originally sent via /api/trigger-clay-search.
     """
     data = request.get_json()
     if not data:
         return jsonify({'error': 'Request body is required'}), 400
 
-    company_key = (data.get('company_key') or '').strip()
-    if not company_key:
-        return jsonify({'error': 'company_key is required — must match the key from trigger-clay-search'}), 400
+    raw_key = (data.get('company_key') or '').strip()
+    if not raw_key:
+        return jsonify({'error': 'company_key (domain) is required'}), 400
+
+    # Normalize the domain key in case Clay passes it back slightly differently
+    company_key = get_company_key(raw_key)
 
     print(f"\n{'='*60}", file=sys.stderr)
-    print(f"[CLAY CALLBACK] Received contact data for key={company_key}", file=sys.stderr)
+    print(f"[CLAY CALLBACK] Received contact data for domain={company_key}", file=sys.stderr)
     print(f"  Raw payload: {json.dumps(data, indent=2, default=str)}", file=sys.stderr)
     print(f"{'='*60}\n", file=sys.stderr)
 
@@ -2231,7 +2239,7 @@ def clay_contact_result():
             incoming_contacts = [single]
 
     if not incoming_contacts:
-        print(f"[CLAY CALLBACK] No contacts in payload for key={company_key}", file=sys.stderr)
+        print(f"[CLAY CALLBACK] No contacts in payload for domain={company_key}", file=sys.stderr)
         # Still mark as complete even with 0 contacts (Clay found nothing)
         entry = _get_clay_search(company_key)
         if entry:
@@ -2245,12 +2253,10 @@ def clay_contact_result():
     if not entry:
         # Edge case: callback arrived but we don't have a cache entry
         # (e.g., server restarted, or different worker without Redis)
-        print(f"[CLAY CALLBACK] No cache entry for key={company_key} — creating new entry", file=sys.stderr)
+        print(f"[CLAY CALLBACK] No cache entry for domain={company_key} — creating new entry", file=sys.stderr)
         entry = {
-            'company_name': data.get('company_name', 'Unknown'),
-            'state': data.get('state', ''),
-            'city': data.get('city', ''),
-            'specialty': data.get('specialty', ''),
+            'domain': company_key,
+            'company_name': data.get('company_name', ''),
             'searched_at': datetime.utcnow().isoformat(),
             'status': 'searching',
             'contacts': []
@@ -2277,11 +2283,13 @@ def clay_contact_result():
     })
 
 
-@flask_app.route('/api/clay-search-status/<company_key>', methods=['GET'])
+@flask_app.route('/api/clay-search-status/<path:company_key>', methods=['GET'])
 def clay_search_status(company_key):
     """
-    Poll for Clay search results.
+    Poll for Clay search results by domain.
     Frontend calls this every 3 seconds after triggering a search.
+
+    URL param: company_key — the normalized domain (e.g., "acme.com")
 
     Returns the current state of a Clay search:
     - status: "searching" (still waiting for Clay) or "complete" (contacts received)
@@ -2289,13 +2297,16 @@ def clay_search_status(company_key):
     - searched_at: when the search was initiated
     - contact_count: number of contacts found
     """
+    # Normalize in case of slight URL encoding differences
+    company_key = get_company_key(company_key)
+
     entry = _get_clay_search(company_key)
 
     if not entry:
         return jsonify({
             'found': False,
             'status': 'not_found',
-            'message': 'No search found for this company key'
+            'message': 'No search found for this domain'
         }), 404
 
     return jsonify({
