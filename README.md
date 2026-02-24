@@ -5,20 +5,27 @@ MCP server + Flask dashboard connecting HubSpot CRM with Databricks (Definitive 
 ## Architecture
 
 ```
-Vercel (Frontend)              Railway (Backend)
-┌──────────────────┐           ┌──────────────────────┐
-│  dashboard.html  │──HTTPS──> │  server.py (Flask)    │
-│  (static React)  │           │  ├── /api/deals       │
-└──────────────────┘           │  ├── /api/lookalikes   │
-                               │  ├── /api/filters      │
-                               │  ├── /api/clay-seed    │
-                               │  └── /health           │
-                               │                        │
-                               │  HubSpot API ──────>   │
-                               │  Databricks SQL ────>  │
-                               │  OpenAI API ────────>  │
-                               │  Clay Webhook ──────>  │
-                               └──────────────────────┘
+Vercel (Frontend)              Railway (Backend)                    Clay
+┌──────────────────┐           ┌──────────────────────────┐       ┌──────────────┐
+│  index.html      │──HTTPS──> │  server.py (Flask)        │       │  HTTP API    │
+│  (static React)  │           │  ├── /api/deals           │       │  Table       │
+│                  │           │  ├── /api/lookalikes       │       └──────────────┘
+│                  │           │  ├── /api/filters          │             │
+│                  │           │  ├── /api/clay-seed        │  trigger    │
+│ [Search          │  poll     │  ├── /api/check-clay-search│ ──────────>│
+│  Contacts] ─────>│────────>  │  ├── /api/trigger-clay-    │            │
+│                  │           │  │    search                │  callback  │
+│ [show contacts]  │<────────  │  ├── /api/clay-contact-    │ <──────────│
+│                  │           │  │    result                │
+│                  │           │  ├── /api/clay-search-      │
+│                  │           │  │    status/:key           │
+│                  │           │  └── /health               │
+│                  │           │                            │
+│                  │           │  HubSpot API ──────>       │
+│                  │           │  Databricks SQL ────>      │
+│                  │           │  OpenAI API ────────>      │
+│                  │           │  Redis (optional) ──>      │
+└──────────────────┘           └──────────────────────────┘
 ```
 
 ## Local Development
@@ -94,6 +101,7 @@ Vercel (Frontend)              Railway (Backend)
 - [ ] Vercel dashboard loads and shows deals
 - [ ] Lookalike search returns results
 - [ ] Clay seed buttons work (if `CLAY_WEBHOOK_URL` is set)
+- [ ] Clay contact search triggers and polls correctly (if `CLAY_WEBHOOK_URL` is set)
 - [ ] Railway `ALLOWED_ORIGINS` includes your Vercel domain
 
 ## MCP Server Mode
@@ -109,3 +117,86 @@ For use with Claude Desktop, add to your MCP config:
   }
 }
 ```
+
+## Clay Contact Search (HTTP API Integration)
+
+The Clay Contact Search feature lets users search for contacts at a company via Clay's enrichment engine. Results are cached and deduplicated so repeated searches don't waste Clay credits.
+
+### How It Works
+
+```
+1. User clicks "Search Contacts" on a deal card
+2. Frontend → POST /api/check-clay-search (check cache)
+3. If cached → show results immediately + "Re-run?" prompt
+4. If not cached → POST /api/trigger-clay-search → sends data to Clay webhook
+5. Clay enriches the company → POSTs contacts back to /api/clay-contact-result
+6. Frontend polls GET /api/clay-search-status/<key> every 3 seconds
+7. Contacts are deduplicated by email and LinkedIn URL
+8. Results cached in-memory + Redis (30-day TTL)
+```
+
+### Setting Up the Clay Table
+
+1. **Create a Clay table** with an HTTP API trigger (webhook input)
+
+2. **Add enrichment columns** in Clay to find contacts for the company (e.g., "Find People at Company", LinkedIn search, etc.)
+
+3. **Add an HTTP API output column** (the callback) with these settings:
+
+   | Setting | Value |
+   |---------|-------|
+   | **Endpoint URL** | `https://web-production-768f7.up.railway.app/api/clay-contact-result` |
+   | **Method** | `POST` |
+   | **Headers** | `Content-Type: application/json` |
+
+4. **Configure the callback body** — the `company_key` field is critical and must be passed through from the webhook input:
+
+   **Single contact per row (recommended):**
+   ```json
+   {
+     "company_key": "{{company_key}}",
+     "name": "{{Full Name}}",
+     "email": "{{Work Email}}",
+     "phone": "{{Phone Number}}",
+     "title": "{{Job Title}}",
+     "linkedin": "{{LinkedIn URL}}"
+   }
+   ```
+
+   **Batch format (if sending multiple contacts at once):**
+   ```json
+   {
+     "company_key": "{{company_key}}",
+     "contacts": [
+       {
+         "name": "{{Full Name}}",
+         "email": "{{Work Email}}",
+         "phone": "{{Phone Number}}",
+         "title": "{{Job Title}}",
+         "linkedin": "{{LinkedIn URL}}"
+       }
+     ]
+   }
+   ```
+
+   Replace `{{variable}}` with your actual Clay column references.
+
+5. **Set the `CLAY_WEBHOOK_URL` environment variable** in Railway to your Clay table's webhook URL (the URL Clay gives you for the HTTP API trigger).
+
+### Company Key
+
+The `company_key` is an MD5 hash of `company_name|state|city` (all lowercased and trimmed). It's generated by the backend and sent to Clay as part of the webhook payload. **Clay must pass this value through unchanged** in the callback so the backend can match contacts to the original search request.
+
+### Deduplication
+
+Contacts are deduplicated before being stored:
+- If a contact's **email** matches an existing contact → skip (keep original)
+- If a contact's **LinkedIn URL** matches an existing contact → skip (keep original)
+- New contacts get a `first_seen` timestamp; existing contacts retain their original `first_seen`
+
+### Caching
+
+- **In-memory**: Always active, keyed by `company_key`
+- **Redis**: If configured (Railway Redis add-on), persists across server restarts with 30-day TTL
+- **Multi-worker**: With `gunicorn --workers 2`, Redis ensures cache coherence across workers
+- **Re-run**: Users can force a re-search which clears the cache and triggers a fresh Clay search
