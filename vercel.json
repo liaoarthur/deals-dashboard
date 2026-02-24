@@ -1,4 +1,6 @@
 {
+  "buildCommand": "node packages/lookalike-prospecting/static/inject-env.js",
+  "outputDirectory": "packages/lookalike-prospecting/static",
   "rewrites": [
     { "source": "/", "destination": "/login.html" }
   ],

@@ -1,0 +1,8 @@
+[project]
+name = "gtm-engineering"
+version = "0.1.0"
+description = "GTM Engineering monorepo — shared tools for go-to-market automation"
+requires-python = ">=3.10"
+
+[tool.setuptools]
+packages = []

@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.backends._legacy:_Backend"
+
+[project]
+name = "gtm-core"
+version = "0.1.0"
+description = "Shared GTM intelligence core library"
+requires-python = ">=3.10"
+dependencies = [
+    "redis>=5.0.0",
+    "databricks-sql-connector==3.1.0",
+    "openai>=1.0.0",
+    "requests>=2.31.0",
+    "python-dotenv==1.0.1",
+    "hubspot-api-client==8.2.1",
+    "pandas<2.2.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["core*"]

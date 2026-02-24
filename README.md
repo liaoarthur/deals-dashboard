@@ -1,30 +1,63 @@
-# GTM Intelligence MCP Server
+# GTM Engineering Monorepo
 
-MCP server + Flask dashboard connecting HubSpot CRM with Databricks (Definitive Healthcare). Provides Sales and CS teams with lookalike prospecting and account health analysis.
+Monorepo for go-to-market engineering tools. Shared utilities in `packages/core`, applications in their own packages.
+
+## Repository Structure
+
+```
+deals-dashboard/
+├── packages/
+│   ├── core/                              # Shared Python library (pip: gtm-core)
+│   │   ├── cache.py                       # In-memory cache helpers
+│   │   ├── databricks.py                  # Databricks connection factory
+│   │   ├── contacts.py                    # Contact dedup + validation
+│   │   ├── hubspot.py                     # HubSpot API wrappers + deal search
+│   │   ├── definitive.py                  # Definitive Healthcare queries
+│   │   ├── specialty.py                   # LLM-powered specialty expansion
+│   │   ├── scoring.py                     # Similarity scoring engine
+│   │   └── lookalikes.py                  # Lookalike matching engine
+│   │
+│   └── lookalike-prospecting/             # Deals dashboard application
+│       ├── server.py                      # Flask app + MCP server
+│       ├── requirements.txt               # Python deps
+│       ├── generate_password.py           # Auth password hash generator
+│       ├── test_databricks.py             # Databricks connectivity test
+│       └── static/                        # Frontend (served by Vercel)
+│           ├── index.html                 # Dashboard UI
+│           ├── login.html                 # Login page
+│           └── inject-env.js              # Vercel build-time env injection
+│
+├── requirements.txt                       # Root: chains core + app deps
+├── Procfile                               # Railway entry point
+├── railway.json                           # Railway deploy config
+├── vercel.json                            # Vercel deploy config
+├── pyproject.toml                         # Workspace metadata
+├── .env.example                           # Environment variable docs
+└── .gitignore
+```
 
 ## Architecture
 
 ```
 Vercel (Frontend)              Railway (Backend)                    Clay
 ┌──────────────────┐           ┌──────────────────────────┐       ┌──────────────┐
-│  index.html      │──HTTPS──> │  server.py (Flask)        │       │  HTTP API    │
-│  (static React)  │           │  ├── /api/deals           │       │  Table       │
-│                  │           │  ├── /api/lookalikes       │       └──────────────┘
+│  static/         │──HTTPS──> │  server.py (Flask)        │       │  HTTP API    │
+│  index.html      │           │  ├── /api/deals           │       │  Table       │
+│  login.html      │           │  ├── /api/lookalikes       │       └──────────────┘
 │                  │           │  ├── /api/filters          │             │
 │                  │           │  ├── /api/clay-seed        │  trigger    │
-│ [Search          │  poll     │  ├── /api/check-clay-search│ ──────────>│
-│  Contacts] ─────>│────────>  │  ├── /api/trigger-clay-    │            │
+│                  │  poll     │  ├── /api/check-clay-search│ ──────────>│
+│                  │────────>  │  ├── /api/trigger-clay-    │            │
 │                  │           │  │    search                │  callback  │
-│ [show contacts]  │<────────  │  ├── /api/clay-contact-    │ <──────────│
+│                  │<────────  │  ├── /api/clay-contact-    │ <──────────│
 │                  │           │  │    result                │
-│                  │           │  ├── /api/clay-search-      │
-│                  │           │  │    status/:key           │
 │                  │           │  └── /health               │
 │                  │           │                            │
-│                  │           │  HubSpot API ──────>       │
-│                  │           │  Databricks SQL ────>      │
-│                  │           │  OpenAI API ────────>      │
-│                  │           │  Redis (optional) ──>      │
+│                  │           │  imports from core:         │
+│                  │           │  ├── HubSpot API wrappers   │
+│                  │           │  ├── Databricks queries     │
+│                  │           │  ├── Similarity scoring     │
+│                  │           │  └── OpenAI specialty LLM   │
 └──────────────────┘           └──────────────────────────┘
 ```
 
@@ -36,7 +69,7 @@ Vercel (Frontend)              Railway (Backend)                    Clay
    cd vibe-coding-gtme-rs
    python -m venv venv
    source venv/bin/activate
-   pip install -r requirements.txt
+   pip install -r requirements.txt   # installs core + app deps
    ```
 
 2. Create `.env` from template:
@@ -47,11 +80,10 @@ Vercel (Frontend)              Railway (Backend)                    Clay
 
 3. Run the Flask server:
    ```bash
+   cd packages/lookalike-prospecting
    python server.py --flask-only
    # Server runs on http://localhost:5001
    ```
-
-4. Open `dashboard.html` in your browser (or serve it locally).
 
 ## Deployment
 
@@ -59,178 +91,75 @@ Vercel (Frontend)              Railway (Backend)                    Clay
 
 1. Create a new project on [Railway](https://railway.app)
 2. Connect your GitHub repo
-3. Set environment variables in Railway dashboard:
+3. Set environment variables (see `.env.example` for full list):
 
    | Variable | Description |
    |----------|-------------|
    | `HUBSPOT_ACCESS_TOKEN` | HubSpot private app token |
-   | `HUBSPOT_PORTAL_ID` | HubSpot portal ID |
    | `DATABRICKS_TOKEN` | Databricks personal access token |
    | `DATABRICKS_SERVER_HOSTNAME` | Databricks server hostname |
    | `DATABRICKS_HTTP_PATH` | Databricks SQL warehouse HTTP path |
    | `OPENAI_API_KEY` | OpenAI API key (optional) |
    | `CLAY_WEBHOOK_URL` | Clay webhook URL (optional) |
-   | `ALLOWED_ORIGINS` | Your Vercel URL, e.g. `https://your-app.vercel.app` |
-   | `SECRET_KEY` | Session signing key (generate: `python -c "import secrets; print(secrets.token_hex(32))"`) |
-   | `AUTH_USERS` | Comma-separated `email:passwordhash` pairs (see [Authentication](#authentication)) |
-   | `FLASK_DEBUG` | `false` |
+   | `ALLOWED_ORIGINS` | Your Vercel URL |
+   | `SECRET_KEY` | Session signing key |
+   | `AUTH_USERS` | `email:passwordhash` pairs (see [Authentication](#authentication)) |
 
-4. Railway auto-detects `railway.json` and deploys with gunicorn
-5. Note your Railway URL (e.g. `https://your-app.up.railway.app`)
-6. Verify: `curl https://your-app.up.railway.app/health`
-
-**Optional: Redis add-on**
-- Add Redis from Railway's add-on marketplace
-- Railway auto-sets `REDIS_HOST` and `REDIS_PORT`
+4. Railway auto-detects `requirements.txt` at root and deploys with gunicorn
+5. Verify: `curl https://your-app.up.railway.app/health`
 
 ### Frontend: Vercel
 
 1. Create a new project on [Vercel](https://vercel.com)
-2. Connect your GitHub repo
-3. Set **Framework Preset** to "Other"
-4. Set environment variable:
-
-   | Variable | Value |
-   |----------|-------|
-   | `NEXT_PUBLIC_API_BASE_URL` | Your Railway URL (e.g. `https://your-app.up.railway.app`) |
-
-5. Deploy — Vercel runs `inject-env.js` at build time to bake the API URL into the HTML
-6. Copy your Vercel URL and add it to Railway's `ALLOWED_ORIGINS`
-
-### Post-Deploy Checklist
-
-- [ ] Railway `/health` returns `{"status": "healthy"}`
-- [ ] Vercel dashboard loads and shows deals
-- [ ] Lookalike search returns results
-- [ ] Clay seed buttons work (if `CLAY_WEBHOOK_URL` is set)
-- [ ] Clay contact search triggers and polls correctly (if `CLAY_WEBHOOK_URL` is set)
-- [ ] Railway `ALLOWED_ORIGINS` includes your Vercel domain
-- [ ] Login page shows at root URL and sign-in works
-- [ ] Dashboard redirects to login when not authenticated
+2. Connect your GitHub repo, set **Framework Preset** to "Other"
+3. Set `NEXT_PUBLIC_API_BASE_URL` to your Railway URL
+4. Deploy — Vercel runs `inject-env.js` at build time
+5. Add your Vercel URL to Railway's `ALLOWED_ORIGINS`
 
 ## Authentication
 
-The dashboard uses Flask session-based authentication with secure cookies.
+Flask session-based auth with secure cross-origin cookies.
 
-### Setup
-
-1. **Generate a password hash** for each user:
-
+1. Generate a password hash:
    ```bash
-   python generate_password.py mypassword
+   python packages/lookalike-prospecting/generate_password.py mypassword
    ```
 
-   This outputs a `pbkdf2:sha256:...` hash.
-
-2. **Set `AUTH_USERS`** in Railway with comma-separated `email:hash` pairs:
-
+2. Set `AUTH_USERS` in Railway:
    ```
-   AUTH_USERS=admin@company.com:pbkdf2:sha256:600000:...,user@company.com:pbkdf2:sha256:600000:...
+   AUTH_USERS=admin@co.com:pbkdf2:sha256:...,user@co.com:pbkdf2:sha256:...
    ```
 
-   Note: split on the **first** colon only — password hashes contain colons.
+3. Set `SECRET_KEY` in Railway for stable session signing.
 
-3. **Set `SECRET_KEY`** in Railway for stable session signing:
-
-   ```bash
-   python -c "import secrets; print(secrets.token_hex(32))"
-   ```
-
-   Without a stable key, sessions reset on every server restart.
-
-### How It Works
-
-- `POST /api/login` — validates credentials, sets a signed session cookie (24h expiry)
-- `GET /api/check-auth` — frontend calls this on page load to verify session
-- `POST /api/logout` — clears the session
-- All API routes require a valid session (`@require_auth` decorator)
-- `/health` and `/api/clay-contact-result` are **not** protected (monitoring + server-to-server callback)
+### Auth Details
+- `POST /api/login` — validates credentials, sets session cookie (24h expiry)
+- `GET /api/check-auth` — frontend verifies session on page load
+- `POST /api/logout` — clears session
+- All API routes require `@require_auth` except `/health` and `/api/clay-contact-result`
 - Rate limiting: 5 login attempts per IP per 60 seconds
-
-### Cross-Origin Cookies
-
-Since the frontend (Vercel) and backend (Railway) are on different domains, cookies use:
-- `SameSite=None` — required for cross-origin cookie sending
-- `Secure=True` — cookies only sent over HTTPS
-- `HttpOnly=True` — JavaScript cannot read the session cookie
-- Frontend fetch calls include `credentials: 'include'`
+- Cross-origin cookies: `SameSite=None`, `Secure=True`, `HttpOnly=True`
 
 ## MCP Server Mode
 
-For use with Claude Desktop, add to your MCP config:
+For Claude Desktop, add to your MCP config:
 ```json
 {
   "mcpServers": {
     "gtm-intelligence": {
       "command": "python",
-      "args": ["/absolute/path/to/server.py"]
+      "args": ["/path/to/packages/lookalike-prospecting/server.py"]
     }
   }
 }
 ```
 
-## Clay Contact Search (HTTP API Integration)
+## Adding a New Package
 
-The Clay Contact Search feature lets users search for contacts at a company via Clay's enrichment engine. Results are cached and deduplicated so repeated searches don't waste Clay credits.
-
-### How It Works
-
-```
-1. User clicks "Search Contacts" on a deal card
-2. Frontend → POST /api/check-clay-search (check cache)
-3. If cached → show results immediately + "Re-run?" prompt
-4. If not cached → POST /api/trigger-clay-search → sends data to Clay webhook
-5. Clay enriches the company → POSTs contacts back to /api/clay-contact-result
-6. Frontend polls GET /api/clay-search-status/<key> every 3 seconds
-7. Contacts are deduplicated by email and LinkedIn URL
-8. Results cached in-memory + Redis (30-day TTL)
-```
-
-### Setting Up the Clay Table
-
-1. **Create a Clay table** with an HTTP API trigger (webhook input)
-
-2. **Add enrichment columns** in Clay to find contacts for the company (e.g., "Find People at Company", LinkedIn search, etc.)
-
-3. **Add an HTTP API output column** (the callback) with these settings:
-
-   | Setting | Value |
-   |---------|-------|
-   | **Endpoint URL** | `https://web-production-768f7.up.railway.app/api/clay-contact-result` |
-   | **Method** | `POST` |
-   | **Headers** | `Content-Type: application/json` |
-
-4. **Configure the callback body** — the `company_key` must be passed through from the webhook input (it's the domain):
-
-   ```json
-   {
-     "company_key": "{{Search Domain}}",
-     "full_name": "{{Full Name}}",
-     "title": "{{Job Title}}",
-     "phone": "{{Mobile Phone}}",
-     "linkedin": "{{LinkedIn Profile}}",
-     "email": "{{Work Email}}"
-   }
+1. Create `packages/your-project/` with its own `requirements.txt`:
    ```
-
-   Replace `{{variable}}` with your actual Clay column references. The backend maps `full_name` → `name` internally.
-
-5. **Set the `CLAY_WEBHOOK_URL` environment variable** in Railway to your Clay table's webhook URL (the URL Clay gives you for the HTTP API trigger).
-
-### Company Key
-
-The `company_key` is the **website/domain of the lookalike company** exactly as it comes from Definitive Healthcare (Databricks). It's the raw value — no normalization, no hashing. The backend sends it to Clay in the webhook payload, and **Clay must pass this value back unchanged** in the callback so the backend can match contacts to the correct company.
-
-### Deduplication
-
-Contacts are deduplicated before being stored:
-- If a contact's **email** matches an existing contact → skip (keep original)
-- If a contact's **LinkedIn URL** matches an existing contact → skip (keep original)
-- New contacts get a `first_seen` timestamp; existing contacts retain their original `first_seen`
-
-### Caching
-
-- **In-memory**: Always active, keyed by `company_key`
-- **Redis**: If configured (Railway Redis add-on), persists across server restarts with 30-day TTL
-- **Multi-worker**: With `gunicorn --workers 2`, Redis ensures cache coherence across workers
-- **Re-run**: Users can force a re-search which clears the cache and triggers a fresh Clay search
+   -e ../../packages/core
+   flask>=3.0.0
+   ```
+2. Import shared utilities: `from core.hubspot import search_hubspot_deals`
+3. Add its own Railway service or run as a standalone script
