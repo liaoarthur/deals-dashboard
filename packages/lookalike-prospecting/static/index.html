@@ -1,1253 +1,31 @@
-<!--
-
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Deals Dashboard</title>
-    
-    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: #f5f7fa;
-            min-height: 100vh;
-        }
-
-        .dashboard {
-            max-width: 1600px;
-            margin: 0 auto;
-            padding: 20px;
-        }
-
-        .dashboard-header {
-            text-align: center;
-            margin-bottom: 30px;
-            padding: 40px 20px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border-radius: 12px;
-            position: relative;
-        }
-
-        .dashboard-header h1 {
-            font-size: 2.5em;
-            margin-bottom: 10px;
-        }
-
-        .dashboard-header p {
-            font-size: 1.1em;
-            opacity: 0.95;
-        }
-
-        .logout-btn {
-            position: absolute;
-            top: 20px;
-            right: 20px;
-            background: rgba(255,255,255,0.2);
-            color: white;
-            border: 1px solid rgba(255,255,255,0.4);
-            padding: 8px 18px;
-            border-radius: 8px;
-            font-size: 0.85em;
-            font-weight: 600;
-            cursor: pointer;
-            transition: background 0.2s;
-        }
-
-        .logout-btn:hover {
-            background: rgba(255,255,255,0.35);
-        }
-
-        .filters-section {
-            background: white;
-            padding: 25px;
-            border-radius: 12px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-            margin-bottom: 30px;
-        }
-
-        .filters-section h3 {
-            margin-bottom: 20px;
-            color: #2c3e50;
-            font-size: 1.3em;
-        }
-
-        .filters-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-            gap: 20px;
-        }
-
-        .filter-group {
-            display: flex;
-            flex-direction: column;
-        }
-
-        .filter-group label {
-            font-size: 0.9em;
-            font-weight: 600;
-            color: #555;
-            margin-bottom: 8px;
-        }
-
-        .filter-group select,
-        .filter-group input {
-            padding: 12px;
-            border: 2px solid #e0e0e0;
-            border-radius: 8px;
-            font-size: 1em;
-            transition: all 0.3s;
-            background: white;
-        }
-
-        .filter-group select:focus,
-        .filter-group input:focus {
-            outline: none;
-            border-color: #667eea;
-            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-        }
-
-        .results-section {
-            background: white;
-            padding: 25px;
-            border-radius: 12px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-        }
-
-        .results-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 25px;
-            padding-bottom: 20px;
-            border-bottom: 2px solid #e0e0e0;
-        }
-
-        .results-header h2 {
-            color: #2c3e50;
-            font-size: 1.5em;
-        }
-
-        .loading {
-            color: #667eea;
-            font-weight: 600;
-        }
-
-        .deals-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(500px, 1fr));
-            gap: 25px;
-        }
-
-        .deal-card {
-            background: #f8f9fa;
-            border-radius: 12px;
-            padding: 25px;
-            border-left: 5px solid #667eea;
-            transition: all 0.3s;
-        }
-
-        .deal-card:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 8px 20px rgba(0,0,0,0.15);
-        }
-
-        .deal-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: start;
-            margin-bottom: 20px;
-            padding-bottom: 15px;
-            border-bottom: 2px solid #e0e0e0;
-        }
-
-        .deal-header h3 {
-            color: #2c3e50;
-            font-size: 1.3em;
-            margin: 0;
-            flex: 1;
-            line-height: 1.3;
-        }
-
-        .deal-amount {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 8px 16px;
-            border-radius: 20px;
-            font-weight: 700;
-            font-size: 1.1em;
-            white-space: nowrap;
-            margin-left: 15px;
-        }
-
-        .deal-info-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-            gap: 20px;
-        }
-
-        .info-section {
-            background: white;
-            padding: 15px;
-            border-radius: 8px;
-            border: 1px solid #e0e0e0;
-        }
-
-        .info-section h4 {
-            color: #667eea;
-            font-size: 0.95em;
-            margin-bottom: 12px;
-            padding-bottom: 8px;
-            border-bottom: 2px solid #f0f0f0;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-
-        .info-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 6px 0;
-            font-size: 0.9em;
-        }
-
-        .info-item .label {
-            font-weight: 600;
-            color: #666;
-        }
-
-        .info-item span:last-child {
-            color: #2c3e50;
-            text-align: right;
-            font-weight: 500;
-        }
-
-        .no-results {
-            text-align: center;
-            padding: 60px 20px;
-            color: #999;
-            font-size: 1.2em;
-        }
-
-        @media (max-width: 1024px) {
-            .deals-grid {
-                grid-template-columns: 1fr;
-            }
-            
-            .filters-grid {
-                grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-            }
-        }
-
-        @media (max-width: 768px) {
-            .dashboard-header h1 {
-                font-size: 1.8em;
-            }
-            
-            .filters-grid {
-                grid-template-columns: 1fr;
-            }
-            
-            .deal-info-grid {
-                grid-template-columns: 1fr;
-            }
-            
-            .deal-header {
-                flex-direction: column;
-                align-items: start;
-            }
-            
-            .deal-amount {
-                margin-left: 0;
-                margin-top: 10px;
-            }
-        }
-    </style>
-</head>
-<body>
-    <div id="root"></div>
-
-    <script type="text/babel">
-        const { useState, useEffect } = React;
-
-        function DealsDashboard() {
-            const [deals, setDeals] = useState([]);
-            const [loading, setLoading] = useState(false);
-            const [filterOptions, setFilterOptions] = useState({});
-            
-            const [filters, setFilters] = useState({
-                days_back: 14,
-                deal_stage: '',
-                specialty_mcp_use: '',
-                country: 'United States',
-                billing_state: '',
-                billing_city: '',
-                min_seats: '',
-                min_tso: '',
-                product: '',
-                pipeline: 'Sales - Global'
-            });
-
-            const fetchFilterOptions = async () => {
-                
-                try {
-                    // Build params with ALL current filters
-                    const params = new URLSearchParams();
-                    Object.entries(filters).forEach(([key, value]) => {
-                        if (value && value !== 'None' && value !== 'null') {
-                            params.append(key, value);
-                        }
-                    });
-                    
-                    const response = await fetch(`https://web-production-768f7.up.railway.app/api/filters?${params}`, { credentials: 'include' });
-                    if (response.status === 401) { window.location.href = '/login.html'; return; }
-                    const data = await response.json();
-                    setFilterOptions(data);
-                } catch (error) {
-                    console.error('Error fetching filter options:', error);
-                }
-            };
-
-            //     console.log('Fetching filter options for days_back:', filters.days_back);
-            //     try {
-            //         const url = `https://web-production-768f7.up.railway.app/api/filters?days_back=${filters.days_back}`;
-            //         console.log('Filter options URL:', url);
-            //         const response = await fetch(url);
-            //         const data = await response.json();
-            //         console.log('Filter options received:', data);
-            //         setFilterOptions(data);
-            //     } catch (error) {
-            //         console.error('Error fetching filter options:', error);
-            //     }
-            // };
-
-            const fetchDeals = async () => {
-                setLoading(true);
-                
-                try {
-                    const params = new URLSearchParams();
-                    Object.entries(filters).forEach(([key, value]) => {
-                        if (value && value !== 'None' && value !== 'null') {
-                            params.append(key, value);
-                        }
-                    });
-                    
-                    const response = await fetch(`https://web-production-768f7.up.railway.app/api/deals?${params}`, { credentials: 'include' });
-                    if (response.status === 401) { window.location.href = '/login.html'; return; }
-                    const data = await response.json();
-
-                    setDeals(data);
-                } catch (error) {
-                    console.error('Error fetching deals:', error);
-                } finally {
-                    setLoading(false);
-                }
-            };
-
-            const updateFilter = (key, value) => {
-                const cleanValue = value === 'None' || value === 'null' ? '' : value;
-                setFilters(prev => ({ ...prev, [key]: cleanValue }));
-            };
-
-            const formatDate = (dateString) => {
-                if (!dateString) return 'N/A';
-                return new Date(dateString).toLocaleDateString();
-            };
-
-            const formatCurrency = (amount) => {
-                return new Intl.NumberFormat('en-US', {
-                    style: 'currency',
-                    currency: 'USD',
-                    minimumFractionDigits: 0,
-                    maximumFractionDigits: 0
-                }).format(amount);
-            };
-
-            useEffect(() => {
-                fetchFilterOptions();
-                fetchDeals();
-                console.log('TEST: any filter change ', filters);
-            }, [filters]);
-            
-            return (
-                <div className="dashboard">
-                    <header className="dashboard-header">
-                        <h1>📊 Deals Dashboard</h1>
-                        <p>Filter and view deals by stage, specialty, location, and more</p>
-                    </header>
-
-                    <div className="filters-section">
-                        <h3>Filters</h3>
-                        <div className="filters-grid">
-                            
-                            <div className="filter-group">
-                                <label>📅 Time Period</label>
-                                <select 
-                                    value={filters.days_back} 
-                                    onChange={(e) => updateFilter('days_back', e.target.value)}
-                                >
-                                    <option value="7">Last 7 days</option>
-                                    <option value="14">Last 14 days</option>
-                                    <option value="30">Last 30 days</option>
-                                    <option value="60">Last 60 days</option>
-                                    <option value="90">Last 90 days</option>
-                                </select>
-                            </div>
-
-                            <div className="filter-group">
-                                <label>🎯 Deal Stage</label>
-                                <select 
-                                    value={filters.deal_stage} 
-                                    onChange={(e) => updateFilter('deal_stage', e.target.value)}
-                                >
-                                <option value="">All Stages</option>
-                                <optgroup label="All Stages">
-                                    {filterOptions.deal_stages?.map(stage => (
-                                        <option key={stage.id} value={stage.id}>
-                                            {stage.label} {stage.pipeline && `(${stage.pipeline})`}
-                                        </option>
-                                    ))}
-                                </optgroup>
-                                </select>
-                            </div>
-
-                            <div className="filter-group">
-                                <label>🔄 Pipeline</label>
-                                <select 
-                                    value={filters.pipeline} 
-                                    onChange={(e) => updateFilter('pipeline', e.target.value)}
-                                >
-                                    <option value="">All Pipelines</option>
-                                    {filterOptions.pipelines?.map(p => (
-                                        <option key={p.id} value={p.name}>{p.name}</option>
-                                    ))}
-                                </select>
-                            </div>
-
-                            <div className="filter-group">
-                                <label>🏥 Specialty</label>
-                                <select 
-                                    value={filters.specialty_mcp_use} 
-                                    onChange={(e) => updateFilter('specialty_mcp_use', e.target.value)}
-                                >
-                                    <option value="">All Specialties</option>
-                                    {filterOptions.specialties?.map(s => (
-                                        <option key={s} value={s}>{s}</option>
-                                    ))}
-                                </select>
-                            </div>
-
-                            <div className="filter-group">
-                                <label>🌍 Country</label>
-                                <select 
-                                    value={filters.country} 
-                                    onChange={(e) => updateFilter('country', e.target.value)}
-                                >
-                                    <option value="">All Countries</option>
-                                    {filterOptions.countries?.map(c => (
-                                        <option key={c} value={c}>{c}</option>
-                                    ))}
-                                </select>
-                            </div>
-
-                            <div className="filter-group">
-                                <label>📍 State</label>
-                                <select 
-                                    value={filters.billing_state} 
-                                    onChange={(e) => updateFilter('billing_state', e.target.value)}
-                                >
-                                    <option value="">All States</option>
-                                    {filterOptions.billing_states?.map(s => (
-                                        <option key={s} value={s}>{s}</option>
-                                    ))}
-                                </select>
-                            </div>
-
-                            <div className="filter-group">
-                                <label>🏙️ City</label>
-                                <select 
-                                    value={filters.billing_city} 
-                                    onChange={(e) => updateFilter('billing_city', e.target.value)}
-                                >
-                                    <option value="">All Cities</option>
-                                    {filterOptions.billing_cities?.map(c => (
-                                        <option key={c} value={c}>{c}</option>
-                                    ))}
-                                </select>
-                            </div>
-
-                            <div className="filter-group">
-                                <label>📦 Product</label>
-                                <select 
-                                    value={filters.product} 
-                                    onChange={(e) => updateFilter('product', e.target.value)}
-                                >
-                                    <option value="">All Products</option>
-                                    {filterOptions.products?.map(p => (
-                                        <option key={p} value={p}>{p}</option>
-                                    ))}
-                                </select>
-                            </div>
-
-                            <div className="filter-group">
-                                <label>💺 Min Seats</label>
-                                <input 
-                                    type="number" 
-                                    value={filters.min_seats} 
-                                    onChange={(e) => updateFilter('min_seats', e.target.value)}
-                                    placeholder="e.g., 5"
-                                    min="0"
-                                />
-                            </div>
-
-                            <div className="filter-group">
-                                <label>📊 Min TSO</label>
-                                <input 
-                                    type="number" 
-                                    value={filters.min_tso} 
-                                    onChange={(e) => updateFilter('min_tso', e.target.value)}
-                                    placeholder="e.g., 10"
-                                    min="0"
-                                />
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="results-section">
-                        <div className="results-header">
-                            <h2>Results ({deals.length} deals)</h2>
-                            {loading && <span className="loading">⏳ Loading...</span>}
-                        </div>
-
-                        <div className="deals-grid">
-                            {deals.map(deal => (
-                                <div key={deal.deal_id} className="deal-card">
-                                    
-                                    <div className="deal-header">
-                                        <h3><a href={deal.deal_url} target="_blank" rel="noopener noreferrer" style={{color: '#2c3e50', textDecoration: 'none'}}> 
-                                            {deal.deal_name}
-                                            </a>
-                                            </h3>
-                                        <span className="deal-amount">
-                                            {formatCurrency(deal.amount)}
-                                        </span>
-                                    </div>
-                                    
-                                    <div className="deal-info-grid">
-                                        
-                                        <div className="info-section">
-                                            <h4>Company & Contact</h4>
-                                            <div className="info-item">
-                                                <span className="label">Company:</span>
-                                                <span>{deal.associated_company_name || 'N/A'}</span>
-                                            </div>
-                                            <div className="info-item">
-                                                <span className="label">Contact Email:</span>
-                                                <span>{deal.associated_contact_email || 'N/A'}</span>
-                                            </div>
-                                        </div>
-
-                                        <div className="info-section">
-                                            <h4>📍 Location</h4>
-                                            <div className="info-item">
-                                                <span className="label">City:</span>
-                                                <span>{deal.billing_city || 'N/A'}</span>
-                                            </div>
-                                            <div className="info-item">
-                                                <span className="label">State:</span>
-                                                <span>{deal.billing_state || 'N/A'}</span>
-                                            </div>
-                                            <div className="info-item">
-                                                <span className="label">Country:</span>
-                                                <span>{deal.country || 'N/A'}</span>
-                                            </div>
-                                        </div>
-
-                                        <div className="info-section">
-                                            <h4>🏥 Medical Info</h4>
-                                            <div className="info-item">
-                                                <span className="label">Specialty:</span>
-                                                <span>{deal.specialty_mcp_use || 'N/A'}</span>
-                                            </div>
-                                            <div className="info-item">
-                                                <span className="label">EHR:</span>
-                                                <span>{deal.ehr || 'N/A'}</span>
-                                            </div>
-                                        </div>
-
-                                        <div className="info-section">
-                                            <h4>📦 Product & Seats</h4>
-                                            <div className="info-item">
-                                                <span className="label">Product:</span>
-                                                <span>{deal.product || 'N/A'}</span>
-                                            </div>
-                                            <div className="info-item">
-                                                <span className="label">Seats:</span>
-                                                <span>{deal.seats}</span>
-                                            </div>
-                                            <div className="info-item">
-                                                <span className="label">TSO:</span>
-                                                <span>{deal.tso}</span>
-                                            </div>
-                                        </div>
-
-                                        <div className="info-section">
-                                            <h4>👤 Owner & Pipeline</h4>
-                                            <div className="info-item">
-                                                <span className="label">Owner:</span>
-                                                <span>{deal.owner_name || 'N/A'}</span>
-                                            </div>
-                                            <div className="info-item">
-                                                <span className="label">Pipeline:</span>
-                                                <span>{deal.pipeline_name || 'N/A'}</span>
-                                            </div>
-                                            <div className="info-item">
-                                                <span className="label">Stage:</span>
-                                                <span>{deal.dealstage_name || 'N/A'}</span>
-                                            </div>
-                                        </div>
-
-                                        <div className="info-section">
-                                            <h4>📅 Dates</h4>
-                                            <div className="info-item">
-                                                <span className="label">Closed:</span>
-                                                <span>{formatDate(deal.close_date)}</span>
-                                            </div>
-                                        </div>
-
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-
-                        {deals.length === 0 && !loading && (
-                            <div className="no-results">
-                                <p>No deals found matching your filters</p>
-                            </div>
-                        )}
-                    </div>
-                </div>
-            );
-        }
-
-        ReactDOM.render(<DealsDashboard />, document.getElementById('root'));
-    </script>
-</body>
-</html> -->
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Deals Dashboard with Lookalikes</title>
-    
+
+    <!-- Design System -->
+    <link rel="stylesheet" href="/design-system.css">
+
     <!-- React & Babel -->
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    
+
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: #f5f7fa;
-            min-height: 100vh;
-        }
-
-        .dashboard {
-            max-width: 1600px;
-            margin: 0 auto;
-            padding: 20px;
-        }
-
-        .dashboard-header {
-            text-align: center;
-            margin-bottom: 30px;
-            padding: 40px 20px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border-radius: 12px;
-            position: relative;
-        }
-
-        .dashboard-header h1 {
-            font-size: 2.5em;
-            margin-bottom: 10px;
-        }
-
-        .filters-section {
-            background: white;
-            padding: 25px;
-            border-radius: 12px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-            margin-bottom: 30px;
-        }
-
-        .filters-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-            gap: 20px;
-        }
-
-        .filter-group label {
-            font-size: 0.9em;
-            font-weight: 600;
-            color: #555;
-            margin-bottom: 8px;
-            display: block;
-        }
-
-        .filter-group select,
-        .filter-group input {
-            width: 100%;
-            padding: 12px;
-            border: 2px solid #e0e0e0;
-            border-radius: 8px;
-            font-size: 1em;
-            transition: all 0.3s;
-        }
-
-        .filter-group select:focus,
-        .filter-group input:focus {
-            outline: none;
-            border-color: #667eea;
-            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-        }
-
-        .results-section {
-            background: white;
-            padding: 25px;
-            border-radius: 12px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-        }
-
-        .results-header {
+        /* One-off: lookalike card header layout (not worth a global class) */
+        .lookalike-card-header {
             display: flex;
             justify-content: space-between;
-            align-items: center;
-            margin-bottom: 25px;
-            padding-bottom: 20px;
-            border-bottom: 2px solid #e0e0e0;
-        }
-
-        .deals-grid {
-            display: grid;
-            gap: 20px;
-        }
-
-        /* Collapsible Deal Card */
-        .deal-card {
-            background: #f8f9fa;
-            border-radius: 12px;
-            border-left: 5px solid #667eea;
-            overflow: hidden;
-            transition: all 0.3s;
-        }
-
-        .deal-card:hover {
-            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-        }
-
-        .deal-header-toggle {
-            padding: 20px 25px;
-            cursor: pointer;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            background: white;
-            border-bottom: 1px solid #e0e0e0;
-            user-select: none;
-        }
-
-        .deal-header-toggle:hover {
-            background: #f8f9fa;
-        }
-
-        .deal-title-section {
-            flex: 1;
-            display: flex;
-            align-items: center;
-            gap: 15px;
-        }
-
-        .deal-title-section h3 {
-            color: #2c3e50;
-            font-size: 1.3em;
-            margin: 0;
-        }
-
-        .deal-title-section h3 a {
-            color: #2c3e50;
-            text-decoration: none;
-        }
-
-        .deal-title-section h3 a:hover {
-            color: #667eea;
-        }
-
-        .deal-amount {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 8px 16px;
-            border-radius: 20px;
-            font-weight: 700;
-            font-size: 1.1em;
-            white-space: nowrap;
-        }
-
-        .toggle-icon {
-            font-size: 1.5em;
-            color: #667eea;
-            transition: transform 0.3s;
-        }
-
-        .toggle-icon.expanded {
-            transform: rotate(180deg);
-        }
-
-        .deal-content {
-            max-height: 0;
-            overflow: hidden;
-            transition: max-height 0.4s ease-out;
-        }
-
-        .deal-content.expanded {
-            max-height: none;
-            overflow: visible;
-        }
-
-        .deal-info-section {
-            padding: 25px;
-            border-bottom: 2px solid #e0e0e0;
-        }
-
-        .deal-info-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-            gap: 20px;
-        }
-
-        .info-section {
-            background: white;
-            padding: 15px;
-            border-radius: 8px;
-            border: 1px solid #e0e0e0;
-        }
-
-        .info-section h4 {
-            color: #667eea;
-            font-size: 0.95em;
-            margin-bottom: 12px;
-            padding-bottom: 8px;
-            border-bottom: 2px solid #f0f0f0;
-            text-transform: uppercase;
-        }
-
-        .info-item {
-            display: flex;
-            justify-content: space-between;
-            padding: 6px 0;
-            font-size: 0.9em;
-        }
-
-        .info-item .label {
-            font-weight: 600;
-            color: #666;
-        }
-
-        .info-item span:last-child {
-            color: #2c3e50;
-            text-align: right;
-            font-weight: 500;
-        }
-
-        /* Lookalike Section */
-        .lookalike-section {
-            padding: 25px;
-            background: #f8f9fa;
-        }
-
-        .lookalike-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 20px;
-        }
-
-        .lookalike-header h4 {
-            font-size: 1.2em;
-            color: #2c3e50;
-        }
-
-        .find-lookalikes-btn {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border: none;
-            padding: 12px 24px;
-            border-radius: 8px;
-            font-size: 1em;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s;
-        }
-
-        .find-lookalikes-btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
-        }
-
-        .find-lookalikes-btn:disabled {
-            opacity: 0.6;
-            cursor: not-allowed;
-            transform: none;
-        }
-
-        .lookalike-placeholder {
-            text-align: center;
-            padding: 40px;
-            color: #999;
-            font-style: italic;
-        }
-
-        .lookalike-filters {
-            display: flex;
-            gap: 8px;
-            flex-wrap: wrap;
-            margin-bottom: 12px;
-            align-items: center;
-        }
-
-        .lookalike-filters select {
-            padding: 5px 8px;
-            border: 1px solid #ddd;
-            border-radius: 6px;
-            font-size: 0.82em;
-            background: white;
-            color: #333;
-            cursor: pointer;
-            min-width: 0;
-            max-width: 180px;
-        }
-
-        .lookalike-filters select:focus {
-            border-color: #667eea;
-            outline: none;
-            box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.15);
-        }
-
-        .lookalike-filter-clear {
-            padding: 5px 10px;
-            border: 1px solid #e74c3c;
-            border-radius: 6px;
-            font-size: 0.82em;
-            background: white;
-            color: #e74c3c;
-            cursor: pointer;
-            font-weight: 500;
-            transition: all 0.2s;
-        }
-
-        .lookalike-filter-clear:hover {
-            background: #e74c3c;
-            color: white;
-        }
-
-        .lookalike-results {
-            display: grid;
-            gap: 15px;
-        }
-
-        .lookalike-card {
-            background: white;
-            padding: 15px;
-            border-radius: 8px;
-            border-left: 3px solid #667eea;
-        }
-
-        .lookalike-card h5 {
-            color: #2c3e50;
-            margin-bottom: 8px;
-            font-size: 1.1em;
-        }
-
-        .clay-seed-btn {
-            padding: 4px 10px;
-            border: none;
-            border-radius: 5px;
-            font-size: 0.78em;
-            font-weight: 600;
-            cursor: pointer;
-            background: linear-gradient(135deg, #f5a623 0%, #f76b1c 100%);
-            color: white;
-            white-space: nowrap;
-            transition: all 0.2s;
-        }
-
-        .clay-seed-btn:hover:not(:disabled) {
-            transform: translateY(-1px);
-            box-shadow: 0 2px 8px rgba(245, 166, 35, 0.4);
-        }
-
-        .clay-seed-btn:disabled {
-            opacity: 0.7;
-            cursor: not-allowed;
-            transform: none;
-            background: #4caf50;
-        }
-
-        .lookalike-meta {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-            gap: 10px;
-            margin-top: 10px;
-            font-size: 0.9em;
-            color: #666;
-        }
-
-        .contacts-toggle {
-            margin-top: 10px;
-            padding: 8px 12px;
-            background: #f0f2ff;
-            border: 1px solid #dde0f5;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 0.85em;
-            font-weight: 600;
-            color: #667eea;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            user-select: none;
-        }
-
-        .contacts-toggle:hover {
-            background: #e4e8ff;
-        }
-
-        .contacts-list {
-            margin-top: 8px;
-            display: grid;
-            gap: 8px;
-        }
-
-        .contact-row {
-            display: grid;
-            grid-template-columns: 1.2fr 1fr 1.5fr 1fr 0.8fr;
-            gap: 8px;
-            align-items: center;
-            padding: 8px 10px;
-            background: #fafbff;
-            border-radius: 6px;
-            border: 1px solid #eef0f5;
-            font-size: 0.82em;
-        }
-
-        .contact-row .contact-name {
-            font-weight: 600;
-            color: #2c3e50;
-        }
-
-        .contact-row .contact-title {
-            color: #666;
-            font-style: italic;
-        }
-
-        .contact-row a {
-            color: #667eea;
-            text-decoration: none;
-        }
-
-        .contact-row a:hover {
-            text-decoration: underline;
-        }
-
-        .contact-badge {
-            display: inline-block;
-            padding: 2px 6px;
-            border-radius: 4px;
-            font-size: 0.75em;
-            font-weight: 600;
-        }
-
-        .contact-badge.physician {
-            background: #e8f5e9;
-            color: #2e7d32;
-        }
-
-        .contact-badge.executive {
-            background: #fff3e0;
-            color: #e65100;
-        }
-
-        .fallback-badge {
-            color: #b26a00;
-            font-size: 0.8em;
-            font-weight: 500;
-            cursor: help;
-        }
-
-        .loading {
-            color: #667eea;
-            font-weight: 600;
-        }
-
-        .no-results {
-            text-align: center;
-            padding: 60px 20px;
-            color: #999;
-            font-size: 1.2em;
-        }
-
-        /* ── Clay Contact Search Section ───────────────────────────── */
-        .clay-search-section {
-            margin-top: 20px;
-            padding-top: 20px;
-            border-top: 1px dashed #ddd;
-        }
-
-        .clay-search-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 15px;
-        }
-
-        .clay-search-header h4 {
-            font-size: 1.1em;
-            color: #2c3e50;
-            margin: 0;
-        }
-
-        .clay-search-btn {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border: none;
-            padding: 10px 20px;
-            border-radius: 8px;
-            font-size: 0.95em;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s;
-        }
-
-        .clay-search-btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
-        }
-
-        .clay-search-btn:disabled {
-            opacity: 0.6;
-            cursor: not-allowed;
-            transform: none;
-        }
-
-        .clay-rerun-prompt {
-            background: #fff3cd;
-            border: 1px solid #ffc107;
-            border-radius: 8px;
-            padding: 12px 16px;
-            margin-bottom: 15px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            font-size: 0.9em;
-            color: #856404;
-        }
-
-        .clay-rerun-prompt button {
-            background: #ffc107;
-            color: #856404;
-            border: none;
-            padding: 6px 14px;
-            border-radius: 6px;
-            font-size: 0.85em;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.2s;
-            white-space: nowrap;
-            margin-left: 12px;
-        }
-
-        .clay-rerun-prompt button:hover {
-            background: #e0a800;
-            color: #533f03;
-        }
-
-        .clay-contact-card {
-            background: white;
-            border: 1px solid #e0e0e0;
-            border-radius: 8px;
-            padding: 12px 16px;
-            margin-bottom: 8px;
-            transition: box-shadow 0.2s;
-        }
-
-        .clay-contact-card:hover {
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-        }
-
-        .clay-contact-card h6 {
-            font-size: 0.95em;
-            color: #2c3e50;
-            margin: 0 0 6px 0;
-        }
-
-        .clay-contact-meta {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 4px 16px;
-            font-size: 0.85em;
-            color: #555;
-        }
-
-        .clay-contact-meta a {
-            color: #667eea;
-            text-decoration: none;
-        }
-
-        .clay-contact-meta a:hover {
-            text-decoration: underline;
-        }
-
-        .clay-contact-meta .first-seen {
-            color: #999;
-            font-size: 0.8em;
-            font-style: italic;
-        }
-
-        @media (max-width: 768px) {
-            .deal-title-section {
-                flex-direction: column;
-                align-items: flex-start;
-            }
-
-            .deal-amount {
-                margin-left: 0;
-            }
+            align-items: flex-start;
         }
     </style>
 </head>
 <body>
     <div id="root"></div>
 
-    <!-- Set API_BASE_URL for production (Vercel injects this via _env.js or inline script) -->
+    <!-- Set API_BASE_URL for production (Vercel injects this via inject-env.js) -->
     <script>
         window.API_BASE_URL = 'https://web-production-768f7.up.railway.app';
     </script>
@@ -1296,7 +74,6 @@
             const [claySearchError, setClaySearchError] = useState(null);
             const clayPollRef = React.useRef(null);
 
-            // Clay search uses the lookalike company's website as the key
             const searchClayContacts = async (force = false) => {
                 const domain = org.website;
                 if (!domain) {
@@ -1307,12 +84,9 @@
                 setLoadingClaySearch(true);
                 setClaySearchError(null);
                 setShowRerunPrompt(false);
-                console.log(`[Clay Search] Starting for domain="${domain}" (${org.name}), force=${force}`);
 
                 try {
                     if (!force) {
-                        // Step 1: Check cache
-                        console.log('[Clay Search] Checking cache...');
                         const checkResp = await fetch(`${API_BASE_URL}/api/check-clay-search`, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
@@ -1321,10 +95,8 @@
                         });
                         if (checkResp.status === 401) { window.location.href = '/login.html'; return; }
                         const checkData = await checkResp.json();
-                        console.log('[Clay Search] Cache check result:', checkData);
 
                         if (checkData.found && checkData.status === 'complete') {
-                            console.log(`[Clay Search] Cache HIT — ${checkData.contact_count} contacts`);
                             setClayContacts(checkData.contacts || []);
                             setCachedSearchResult(checkData);
                             setShowRerunPrompt(true);
@@ -1333,14 +105,11 @@
                         }
 
                         if (checkData.found && checkData.status === 'searching') {
-                            console.log('[Clay Search] Already in progress, polling...');
                             startClayPolling(checkData.company_key);
                             return;
                         }
                     }
 
-                    // Step 2: Trigger new search
-                    console.log('[Clay Search] Triggering new search via Clay webhook...');
                     const triggerResp = await fetch(`${API_BASE_URL}/api/trigger-clay-search`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -1355,7 +124,6 @@
                         }),
                     });
                     const triggerData = await triggerResp.json();
-                    console.log('[Clay Search] Trigger result:', triggerData);
 
                     if (triggerData.error) {
                         setClaySearchError(triggerData.error);
@@ -1368,8 +136,6 @@
                         return;
                     }
 
-                    // Step 3: Poll for results
-                    console.log(`[Clay Search] Polling key=${triggerData.company_key}`);
                     startClayPolling(triggerData.company_key);
 
                 } catch (e) {
@@ -1382,11 +148,10 @@
             const startClayPolling = (companyKey) => {
                 if (clayPollRef.current) clearInterval(clayPollRef.current);
                 let pollCount = 0;
-                const maxPolls = 40; // 40 × 3s = 2 min max
+                const maxPolls = 40;
 
                 clayPollRef.current = setInterval(async () => {
                     pollCount++;
-                    console.log(`[Clay Poll] #${pollCount} for ${companyKey}`);
                     try {
                         const resp = await fetch(`${API_BASE_URL}/api/clay-search-status/${companyKey}`, { credentials: 'include' });
                         const data = await resp.json();
@@ -1396,7 +161,6 @@
                         }
 
                         if (data.status === 'complete' || pollCount >= maxPolls) {
-                            console.log(`[Clay Poll] Done — ${(data.contacts || []).length} contacts`);
                             clearInterval(clayPollRef.current);
                             clayPollRef.current = null;
                             setClayContacts(data.contacts || []);
@@ -1414,7 +178,6 @@
                 }, 3000);
             };
 
-            // Cleanup poll on unmount
             React.useEffect(() => {
                 return () => { if (clayPollRef.current) clearInterval(clayPollRef.current); };
             }, []);
@@ -1455,7 +218,7 @@
                     c.direct_email_secondary && { label: 'Direct 2', value: c.direct_email_secondary },
                     c.business_email && { label: 'Work', value: c.business_email },
                 ].filter(Boolean);
-                if (emails.length === 0) return <span style={{color: '#ccc'}}>—</span>;
+                if (emails.length === 0) return <span className="text-muted">—</span>;
                 return (
                     <span>
                         {emails.map((e, i) => (
@@ -1473,7 +236,7 @@
                     c.mobile_phone_primary && { label: 'Mobile', value: c.mobile_phone_primary },
                     c.mobile_phone_secondary && { label: 'Mobile 2', value: c.mobile_phone_secondary },
                 ].filter(Boolean);
-                if (phones.length === 0) return <span style={{color: '#ccc'}}>—</span>;
+                if (phones.length === 0) return <span className="text-muted">—</span>;
                 return (
                     <span>
                         {phones.map((p, i) => (
@@ -1488,39 +251,39 @@
 
             return (
                 <div className="lookalike-card">
-                    <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start'}}>
-                        <h5 style={{margin: 0}}>{org.name}</h5>
+                    <div className="lookalike-card-header">
+                        <h5>{org.name}</h5>
                         <button
                             className="clay-seed-btn"
                             onClick={seedClayCompany}
                             disabled={claySending || claySent}
                             title="Send to Clay for contact enrichment"
                         >
-                            {claySending ? '...' : claySent ? '✓ Sent' : '🧱 Clay'}
+                            {claySending ? '...' : claySent ? 'Sent' : 'Clay'}
                         </button>
                     </div>
                     <div className="lookalike-meta">
-                        <span>📍 {org.city}, {org.state}</span>
-                        <span>🏥 {org.specialty || 'N/A'}</span>
-                        <span>👥 {org.physician_count} physicians</span>
-                        <span>🎯 {org.similarity_score}% match</span>
-                        {org.ehr && <span>💻 EHR: {org.ehr}</span>}
-                        {org.website && <span>🌐 <a href={org.website.startsWith('http') ? org.website : `https://${org.website}`} target="_blank" rel="noopener noreferrer">{org.website}</a></span>}
+                        <span>{org.city}, {org.state}</span>
+                        <span>{org.specialty || 'N/A'}</span>
+                        <span>{org.physician_count} physicians</span>
+                        <span>{org.similarity_score}% match</span>
+                        {org.ehr && <span>EHR: {org.ehr}</span>}
+                        {org.website && <span><a href={org.website.startsWith('http') ? org.website : `https://${org.website}`} target="_blank" rel="noopener noreferrer">{org.website}</a></span>}
                     </div>
                     {org.match_reasons && org.match_reasons.length > 0 && (
-                        <div style={{fontSize: '0.8em', color: '#888', marginTop: 6}}>
+                        <div className="match-reasons">
                             {org.match_reasons.join(' · ')}
                         </div>
                     )}
                     {contacts.length > 0 && (
                         <>
                             <div className="contacts-toggle" onClick={() => setContactsOpen(!contactsOpen)}>
-                                <span>👤 {contacts.length} contact{contacts.length !== 1 ? 's' : ''}</span>
-                                <span style={{transition: 'transform 0.2s', transform: contactsOpen ? 'rotate(180deg)' : 'none'}}>▼</span>
+                                <span>{contacts.length} contact{contacts.length !== 1 ? 's' : ''}</span>
+                                <span className={contactsOpen ? 'toggle-icon expanded' : 'toggle-icon'}>&#9660;</span>
                             </div>
                             {contactsOpen && (
                                 <div className="contacts-list">
-                                    <div className="contact-row" style={{fontWeight: 700, fontSize: '0.78em', color: '#999', background: 'transparent', border: 'none'}}>
+                                    <div className="contact-row contact-row-header">
                                         <span>Name</span>
                                         <span>Title</span>
                                         <span>Email(s)</span>
@@ -1549,49 +312,46 @@
                         </>
                     )}
 
-                    {/* ── Clay Contact Search (per lookalike company) ──── */}
-                    <div className="clay-search-section" style={{borderTop: '1px dashed #e0e0e0', marginTop: 12, paddingTop: 10}}>
-                        <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8}}>
-                            <span style={{fontSize: '0.85em', fontWeight: 600, color: '#555'}}>🧱 Clay Contacts</span>
+                    {/* ── Clay Contact Search ──── */}
+                    <div className="clay-search-section">
+                        <div className="clay-search-header">
+                            <span className="clay-search-label">Clay Contacts</span>
                             <button
-                                className="clay-search-btn"
-                                style={{padding: '5px 12px', fontSize: '0.8em'}}
+                                className="clay-seed-btn"
                                 onClick={() => searchClayContacts(false)}
                                 disabled={loadingClaySearch || !org.website}
                                 title={org.website ? `Search Clay for contacts at ${org.website}` : 'No website — cannot search'}
                             >
-                                {loadingClaySearch ? '⏳...' : '🔍 Search'}
+                                {loadingClaySearch ? 'Searching...' : 'Search'}
                             </button>
                         </div>
 
                         {claySearchError && (
-                            <div style={{color: '#e74c3c', fontSize: '0.8em', marginBottom: 6}}>⚠️ {claySearchError}</div>
+                            <div className="text-error">{claySearchError}</div>
                         )}
 
                         {showRerunPrompt && cachedSearchResult && (
-                            <div className="clay-rerun-prompt" style={{padding: '8px 12px', fontSize: '0.8em'}}>
+                            <div className="clay-rerun-prompt">
                                 <span>
-                                    📋 {new Date(cachedSearchResult.searched_at).toLocaleDateString()} — {(clayContacts || []).length} contact{(clayContacts || []).length !== 1 ? 's' : ''}
+                                    {new Date(cachedSearchResult.searched_at).toLocaleDateString()} — {(clayContacts || []).length} contact{(clayContacts || []).length !== 1 ? 's' : ''}
                                 </span>
-                                <button onClick={() => searchClayContacts(true)} style={{padding: '4px 10px', fontSize: '0.8em'}}>
-                                    🔄 Re-run
-                                </button>
+                                <button onClick={() => searchClayContacts(true)}>Re-run</button>
                             </div>
                         )}
 
                         {loadingClaySearch && !clayContacts && (
-                            <div style={{fontSize: '0.8em', color: '#667eea', fontWeight: 600}}>🔄 Searching Clay...</div>
+                            <div className="text-searching">Searching Clay...</div>
                         )}
 
                         {loadingClaySearch && clayContacts && clayContacts.length > 0 && (
-                            <div style={{fontSize: '0.8em', color: '#667eea', marginBottom: 4}}>
+                            <div className="text-searching">
                                 Found {clayContacts.length} so far, still searching...
                             </div>
                         )}
 
                         {clayContacts && clayContacts.length > 0 && (
                             <div className="contacts-list">
-                                <div className="contact-row" style={{fontWeight: 700, fontSize: '0.78em', color: '#999', background: 'transparent', border: 'none'}}>
+                                <div className="contact-row contact-row-header">
                                     <span>Name</span>
                                     <span>Title</span>
                                     <span>Email(s)</span>
@@ -1617,7 +377,7 @@
                         )}
 
                         {clayContacts && clayContacts.length === 0 && !loadingClaySearch && (
-                            <div style={{fontSize: '0.8em', color: '#999'}}>No contacts found from Clay</div>
+                            <div className="text-muted text-small">No contacts found from Clay</div>
                         )}
                     </div>
                 </div>
@@ -1637,7 +397,6 @@
                 state: ''
             });
 
-            // Re-fetch when filters change (only after initial load)
             useEffect(() => {
                 if (lookalikesLoadedRef.current) {
                     findLookalikes(true);
@@ -1659,7 +418,6 @@
             };
 
             const findLookalikes = async (resetPage) => {
-                // Use billing_state/billing_city from deal, fall back to lc_us_state/lc_city from associated company
                 const effectiveState = deal.billing_state || deal.lc_us_state;
                 const effectiveCity = deal.billing_city || deal.lc_city;
 
@@ -1677,7 +435,6 @@
                     params.append('page', lookalikePageRef.current);
                     params.append('page_size', '10');
 
-                    // Send filter params to server
                     if (lookalikeFilters.specialty) params.append('filter_specialty', lookalikeFilters.specialty);
                     if (lookalikeFilters.minMatch) params.append('filter_min_match', lookalikeFilters.minMatch);
                     if (lookalikeFilters.city) params.append('filter_city', lookalikeFilters.city);
@@ -1700,17 +457,10 @@
                 }
             };
 
-            // Filter options come from the server (full unfiltered set)
             const filterOpts = (lookalikes && lookalikes.filter_options) || {};
             const lookalikeSpecialties = filterOpts.specialties || [];
             const lookalikeCities = filterOpts.cities || [];
             const lookalikeStates = filterOpts.states || [];
-
-            // Deal-level Clay seed commented out — now per-lookalike company
-            // const [claySent, setClaySent] = useState(false);
-            // const [claySending, setClaySending] = useState(false);
-            // const [clayError, setClayError] = useState(null);
-            // const seedClay = async () => { ... };
 
             return (
                 <div className="deal-card">
@@ -1723,105 +473,103 @@
                             </h3>
                             <span className="deal-amount">{formatCurrency(deal.amount)}</span>
                         </div>
-                        <span className={`toggle-icon ${expanded ? 'expanded' : ''}`}>▼</span>
+                        <span className={`toggle-icon ${expanded ? 'expanded' : ''}`}>&#9660;</span>
                     </div>
 
                     <div className={`deal-content ${expanded ? 'expanded' : ''}`}>
-                        {/* Deal Info Section */}
                         <div className="deal-info-section">
                             <div className="deal-info-grid">
                                 <div className="info-section">
                                     <h4>Company & Contact</h4>
                                     <div className="info-item">
-                                        <span className="label">Company:</span>
+                                        <span className="label">Company</span>
                                         <span>{deal.associated_company_name || 'N/A'}</span>
                                     </div>
                                     <div className="info-item">
-                                        <span className="label">Contact:</span>
+                                        <span className="label">Contact</span>
                                         <span>{deal.associated_contact_email || 'N/A'}</span>
                                     </div>
                                 </div>
 
                                 <div className="info-section">
-                                    <h4>📍 Location</h4>
+                                    <h4>Location</h4>
                                     <div className="info-item">
-                                        <span className="label">City:</span>
+                                        <span className="label">City</span>
                                         <span>
                                             {deal.billing_city || deal.lc_city || 'N/A'}
                                             {!deal.billing_city && deal.lc_city && <span className="fallback-badge" title="From associated company LC City"> (Co.)</span>}
                                         </span>
                                     </div>
                                     <div className="info-item">
-                                        <span className="label">State:</span>
+                                        <span className="label">State</span>
                                         <span>
                                             {deal.billing_state || deal.lc_us_state || 'N/A'}
                                             {!deal.billing_state && deal.lc_us_state && <span className="fallback-badge" title="From associated company LC US State"> (Co.)</span>}
                                         </span>
                                     </div>
                                     <div className="info-item">
-                                        <span className="label">Country:</span>
+                                        <span className="label">Country</span>
                                         <span>{deal.country || 'N/A'}</span>
                                     </div>
                                 </div>
 
                                 <div className="info-section">
-                                    <h4>🏥 Medical Info</h4>
+                                    <h4>Medical Info</h4>
                                     <div className="info-item">
-                                        <span className="label">Specialty:</span>
+                                        <span className="label">Specialty</span>
                                         <span>{deal.specialty_mcp_use || 'N/A'}</span>
                                     </div>
                                     <div className="info-item">
-                                        <span className="label">EHR:</span>
+                                        <span className="label">EHR</span>
                                         <span>{deal.ehr || 'N/A'}</span>
                                     </div>
                                 </div>
 
                                 <div className="info-section">
-                                    <h4>📦 Product & Seats</h4>
+                                    <h4>Product & Seats</h4>
                                     <div className="info-item">
-                                        <span className="label">Product:</span>
+                                        <span className="label">Product</span>
                                         <span>{deal.product || 'N/A'}</span>
                                     </div>
                                     <div className="info-item">
-                                        <span className="label">Seats:</span>
+                                        <span className="label">Seats</span>
                                         <span>{deal.seats}</span>
                                     </div>
                                     <div className="info-item">
-                                        <span className="label">TSO:</span>
+                                        <span className="label">TSO</span>
                                         <span>{deal.tso}</span>
                                     </div>
                                 </div>
 
                                 <div className="info-section">
-                                    <h4>👤 Owner & Pipeline</h4>
+                                    <h4>Owner & Pipeline</h4>
                                     <div className="info-item">
-                                        <span className="label">Owner:</span>
+                                        <span className="label">Owner</span>
                                         <span>{deal.owner_name || 'N/A'}</span>
                                     </div>
                                     <div className="info-item">
-                                        <span className="label">Pipeline:</span>
+                                        <span className="label">Pipeline</span>
                                         <span>{deal.pipeline_name || 'N/A'}</span>
                                     </div>
                                     <div className="info-item">
-                                        <span className="label">Stage:</span>
+                                        <span className="label">Stage</span>
                                         <span>{deal.dealstage_name || 'N/A'}</span>
                                     </div>
                                 </div>
 
                                 <div className="info-section">
-                                    <h4>📅 Dates</h4>
+                                    <h4>Dates</h4>
                                     <div className="info-item">
-                                        <span className="label">Closed:</span>
+                                        <span className="label">Closed</span>
                                         <span>{formatDate(deal.close_date)}</span>
                                     </div>
                                 </div>
                             </div>
                         </div>
 
-                        {/* Lookalike Section */}
                         <div className="lookalike-section">
                             <div className="lookalike-header">
-                                <h4>🔍 Lookalike Companies</h4>
+                                <h4>Lookalike Companies</h4>
                                 <button
                                     className="find-lookalikes-btn"
                                     onClick={() => findLookalikes(true)}
@@ -1839,7 +587,7 @@
 
                             {loadingLookalikes && (
                                 <div className="lookalike-placeholder loading">
-                                    🔄 Searching for similar companies...
+                                    Searching for similar companies...
                                 </div>
                             )}
 
@@ -1851,20 +599,18 @@
                                         <div className="lookalike-placeholder">No lookalikes found</div>
                                     ) : (
                                         <>
-                                            <div style={{fontSize: '0.9em', color: '#666', marginBottom: 10}}>
+                                            <div className="lookalike-summary">
                                                 {(lookalikeFilters.specialty || lookalikeFilters.minMatch || lookalikeFilters.city || lookalikeFilters.state)
                                                     ? `${lookalikes.total_matches} matches (filtered from ${lookalikes.total_unfiltered}) — page ${lookalikes.page} of ${Math.max(lookalikes.total_pages, 1)}`
                                                     : `Showing page ${lookalikes.page} of ${lookalikes.total_pages} (${lookalikes.total_matches} total matches)`
                                                 }
                                             </div>
                                             {lookalikes.expanded_specialties && lookalikes.expanded_specialties.length > 0 && (
-                                                <div style={{fontSize: '0.85em', color: '#667eea', marginBottom: 12,
-                                                             padding: '8px 12px', background: '#f0f2ff', borderRadius: 6, borderLeft: '3px solid #667eea'}}>
+                                                <div className="expanded-specialties-note">
                                                     Also searching medically related specialties: {lookalikes.expanded_specialties.join(', ')}
                                                 </div>
                                             )}
 
-                                            {/* Lookalike Filters — always shown when unfiltered results exist */}
                                             <div className="lookalike-filters">
                                                 <select value={lookalikeFilters.specialty}
                                                     onChange={e => setLookalikeFilters(f => ({...f, specialty: e.target.value}))}>
@@ -1874,11 +620,11 @@
                                                 <select value={lookalikeFilters.minMatch}
                                                     onChange={e => setLookalikeFilters(f => ({...f, minMatch: e.target.value}))}>
                                                     <option value="">Min Match %</option>
-                                                    <option value="95">≥ 95% (city + state + specialty)</option>
-                                                    <option value="85">≥ 85% (state + specialty)</option>
-                                                    <option value="75">≥ 75% (city + state + similar)</option>
-                                                    <option value="65">≥ 65% (city + state)</option>
-                                                    <option value="55">≥ 55% (state + similar)</option>
+                                                    <option value="95">&ge; 95%</option>
+                                                    <option value="85">&ge; 85%</option>
+                                                    <option value="75">&ge; 75%</option>
+                                                    <option value="65">&ge; 65%</option>
+                                                    <option value="55">&ge; 55%</option>
                                                 </select>
                                                 <select value={lookalikeFilters.city}
                                                     onChange={e => setLookalikeFilters(f => ({...f, city: e.target.value}))}>
@@ -1906,10 +652,9 @@
                                                 <div className="lookalike-placeholder">No matches for current filters — try adjusting or clearing filters</div>
                                             )}
                                             {lookalikes.total_pages > 1 && (
-                                                <div style={{display: 'flex', justifyContent: 'center', gap: 10, marginTop: 15}}>
+                                                <div className="pagination">
                                                     <button
                                                         className="find-lookalikes-btn"
-                                                        style={{padding: '8px 16px', fontSize: '0.9em'}}
                                                         disabled={lookalikes.page <= 1}
                                                         onClick={() => { lookalikePageRef.current = lookalikes.page - 1; findLookalikes(false); }}
                                                     >
@@ -1917,7 +662,6 @@
                                                     </button>
                                                     <button
                                                         className="find-lookalikes-btn"
-                                                        style={{padding: '8px 16px', fontSize: '0.9em'}}
                                                         disabled={lookalikes.page >= lookalikes.total_pages}
                                                         onClick={() => { lookalikePageRef.current = lookalikes.page + 1; findLookalikes(false); }}
                                                     >
@@ -1940,7 +684,7 @@
             const [deals, setDeals] = useState([]);
             const [loading, setLoading] = useState(false);
             const [filterOptions, setFilterOptions] = useState({});
-            
+
             const [filters, setFilters] = useState({
                 days_back: 14,
                 deal_stage: '',
@@ -1959,7 +703,6 @@
                 try {
                     const params = new URLSearchParams();
                     Object.entries(filters).forEach(([key, value]) => {
-                        // Don't send client-side-only filters to server
                         if (key === 'owner') return;
                         if (value && value !== 'None' && value !== 'null') {
                             params.append(key, value);
@@ -1981,7 +724,6 @@
                 try {
                     const params = new URLSearchParams();
                     Object.entries(filters).forEach(([key, value]) => {
-                        // Don't send client-side-only filters to server
                         if (key === 'owner') return;
                         if (value && value !== 'None' && value !== 'null') {
                             params.append(key, value);
@@ -2005,10 +747,8 @@
                 setFilters(prev => ({ ...prev, [key]: cleanValue }));
             };
 
-            // Extract unique owners from fetched deals
             const ownerOptions = [...new Set(deals.map(d => d.owner_name).filter(Boolean))].sort();
 
-            // Apply client-side owner filter
             const filteredDeals = filters.owner
                 ? deals.filter(d => d.owner_name === filters.owner)
                 : deals;
@@ -2022,14 +762,15 @@
                 <div className="dashboard">
                     <header className="dashboard-header">
                         <button className="logout-btn" onClick={handleLogout}>Sign Out</button>
-                        <h1>📊 Deals Dashboard</h1>
-                        <p>Find deals and discover lookalike companies</p>
+                        <h1>Deals Dashboard</h1>
+                        <p>Filter and view deals, discover lookalike companies</p>
                     </header>
 
-                    <div className="filters-section">
+                    <section className="filters-section">
+                        <div className="filters-section-title">Filters</div>
                         <div className="filters-grid">
                             <div className="filter-group">
-                                <label>📅 Time Period</label>
+                                <label>Time Period</label>
                                 <select value={filters.days_back} onChange={(e) => updateFilter('days_back', e.target.value)}>
                                     <option value="7">Last 7 days</option>
                                     <option value="14">Last 14 days</option>
@@ -2040,7 +781,7 @@
                             </div>
 
                             <div className="filter-group">
-                                <label>🎯 Deal Stage</label>
+                                <label>Deal Stage</label>
                                 <select value={filters.deal_stage} onChange={(e) => updateFilter('deal_stage', e.target.value)}>
                                     <option value="">All Stages</option>
                                     {filterOptions.deal_stages?.map(stage => (
@@ -2052,7 +793,7 @@
                             </div>
 
                             <div className="filter-group">
-                                <label>🔄 Pipeline</label>
+                                <label>Pipeline</label>
                                 <select value={filters.pipeline} onChange={(e) => updateFilter('pipeline', e.target.value)}>
                                     <option value="">All Pipelines</option>
                                     {filterOptions.pipelines?.map(p => (
@@ -2062,7 +803,7 @@
                             </div>
 
                             <div className="filter-group">
-                                <label>👤 Deal Owner</label>
+                                <label>Deal Owner</label>
                                 <select value={filters.owner} onChange={(e) => updateFilter('owner', e.target.value)}>
                                     <option value="">All Owners</option>
                                     {ownerOptions.map(o => (
@@ -2072,7 +813,7 @@
                             </div>
 
                             <div className="filter-group">
-                                <label>🏥 Specialty</label>
+                                <label>Specialty</label>
                                 <select value={filters.specialty_mcp_use} onChange={(e) => updateFilter('specialty_mcp_use', e.target.value)}>
                                     <option value="">All Specialties</option>
                                     {filterOptions.specialties?.map(s => (
@@ -2082,7 +823,7 @@
                             </div>
 
                             <div className="filter-group">
-                                <label>🌍 Country</label>
+                                <label>Country</label>
                                 <select value={filters.country} onChange={(e) => updateFilter('country', e.target.value)}>
                                     <option value="">All Countries</option>
                                     {filterOptions.countries?.map(c => (
@@ -2092,7 +833,7 @@
                             </div>
 
                             <div className="filter-group">
-                                <label>📍 State</label>
+                                <label>State</label>
                                 <select value={filters.billing_state} onChange={(e) => updateFilter('billing_state', e.target.value)}>
                                     <option value="">All States</option>
                                     {filterOptions.billing_states?.map(s => (
@@ -2102,7 +843,7 @@
                             </div>
 
                             <div className="filter-group">
-                                <label>🏙️ City</label>
+                                <label>City</label>
                                 <select value={filters.billing_city} onChange={(e) => updateFilter('billing_city', e.target.value)}>
                                     <option value="">All Cities</option>
                                     {filterOptions.billing_cities?.map(c => (
@@ -2112,7 +853,7 @@
                             </div>
 
                             <div className="filter-group">
-                                <label>📦 Product</label>
+                                <label>Product</label>
                                 <select value={filters.product} onChange={(e) => updateFilter('product', e.target.value)}>
                                     <option value="">All Products</option>
                                     {filterOptions.products?.map(p => (
@@ -2122,31 +863,31 @@
                             </div>
 
                             <div className="filter-group">
-                                <label>💺 Min Seats</label>
-                                <input 
-                                    type="number" 
-                                    value={filters.min_seats} 
+                                <label>Min Seats</label>
+                                <input
+                                    type="number"
+                                    value={filters.min_seats}
                                     onChange={(e) => updateFilter('min_seats', e.target.value)}
                                     placeholder="e.g., 5"
                                 />
                             </div>
 
                             <div className="filter-group">
-                                <label>📊 Min TSO</label>
-                                <input 
-                                    type="number" 
-                                    value={filters.min_tso} 
+                                <label>Min TSO</label>
+                                <input
+                                    type="number"
+                                    value={filters.min_tso}
                                     onChange={(e) => updateFilter('min_tso', e.target.value)}
                                     placeholder="e.g., 10"
                                 />
                             </div>
                         </div>
-                    </div>
+                    </section>
 
-                    <div className="results-section">
+                    <section className="results-section">
                         <div className="results-header">
                             <h2>Results ({filteredDeals.length}{filters.owner ? ` of ${deals.length}` : ''} deals)</h2>
-                            {loading && <span className="loading">⏳ Loading...</span>}
+                            {loading && <span className="loading">Loading...</span>}
                         </div>
 
                         <div className="deals-grid">
@@ -2160,7 +901,7 @@
                                 <p>No deals found matching your filters</p>
                             </div>
                         )}
-                    </div>
+                    </section>
                 </div>
             );
         }

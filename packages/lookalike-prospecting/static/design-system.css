@@ -1,0 +1,1186 @@
+/* ============================================================================
+   GTM INTELLIGENCE — Enterprise Design System
+   Navy & White theme with generous spacing and professional typography.
+   Shared across index.html and login.html.
+   ============================================================================ */
+
+/* ─── 1. CSS Custom Properties (Design Tokens) ──────────────────────────── */
+:root {
+    /* Navy palette — darkest to lightest */
+    --navy-900: #102a43;
+    --navy-800: #243b53;
+    --navy-700: #334e68;
+    --navy-600: #486581;
+    --navy-500: #627d98;
+    --navy-400: #829ab1;
+    --navy-300: #9fb3c8;
+    --navy-200: #bcccdc;
+    --navy-100: #d9e2ec;
+
+    /* Backgrounds & surfaces */
+    --bg-page:    #f7f9fc;
+    --bg-surface: #ffffff;
+    --bg-muted:   #f1f4f8;
+    --bg-subtle:  #e8edf3;
+
+    /* Borders */
+    --border-default: #e4e9f0;
+    --border-hover:   #d0d8e2;
+    --border-strong:  #bcccdc;
+
+    /* Accent (used sparingly for status indicators) */
+    --accent-blue:  #3b82f6;
+    --accent-green: #16a34a;
+    --accent-amber: #d97706;
+    --accent-red:   #dc2626;
+
+    /* Typography */
+    --font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    --text-base:   16px;
+    --leading-body:    1.5;
+    --leading-heading: 1.25;
+
+    /* Spacing scale (rem) */
+    --space-1:  0.25rem;   /*  4px */
+    --space-2:  0.5rem;    /*  8px */
+    --space-3:  0.75rem;   /* 12px */
+    --space-4:  1rem;      /* 16px */
+    --space-5:  1.25rem;   /* 20px */
+    --space-6:  1.5rem;    /* 24px */
+    --space-8:  2rem;      /* 32px */
+    --space-10: 2.5rem;    /* 40px */
+    --space-12: 3rem;      /* 48px */
+    --space-16: 4rem;      /* 64px */
+    --space-20: 5rem;      /* 80px */
+
+    /* Border radii */
+    --radius-sm:  6px;
+    --radius-md:  8px;
+    --radius-lg:  12px;
+    --radius-xl:  16px;
+
+    /* Shadows — subtle depth */
+    --shadow-card:       0 2px 4px rgba(16, 42, 67, 0.06);
+    --shadow-card-hover: 0 8px 16px rgba(16, 42, 67, 0.10);
+    --shadow-focus:      0 0 0 3px rgba(72, 101, 129, 0.15);
+    --shadow-modal:      0 20px 48px rgba(16, 42, 67, 0.18);
+
+    /* Transitions */
+    --transition-fast:   150ms cubic-bezier(0.4, 0, 0.2, 1);
+    --transition-normal: 200ms cubic-bezier(0.4, 0, 0.2, 1);
+    --transition-slow:   300ms cubic-bezier(0.4, 0, 0.2, 1);
+
+    /* Layout */
+    --max-width: 1440px;
+}
+
+
+/* ─── 2. Reset & Base ────────────────────────────────────────────────────── */
+*,
+*::before,
+*::after {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: var(--font-family);
+    font-size: var(--text-base);
+    line-height: var(--leading-body);
+    color: var(--navy-900);
+    background: var(--bg-page);
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+a {
+    color: var(--navy-600);
+    text-decoration: none;
+    transition: color var(--transition-fast);
+}
+
+a:hover {
+    color: var(--navy-800);
+    text-decoration: underline;
+}
+
+
+/* ─── 3. Typography ──────────────────────────────────────────────────────── */
+h1, h2, h3, h4, h5, h6 {
+    line-height: var(--leading-heading);
+    font-weight: 600;
+}
+
+/* Page title */
+.text-h1 {
+    font-size: 2.5rem;     /* 40px */
+    font-weight: 700;
+    color: var(--navy-900);
+    margin-bottom: var(--space-4);
+}
+
+/* Section title */
+.text-h2 {
+    font-size: 2rem;       /* 32px */
+    font-weight: 600;
+    color: var(--navy-800);
+    margin-bottom: var(--space-4);
+}
+
+/* Card title */
+.text-h3 {
+    font-size: 1.5rem;     /* 24px */
+    font-weight: 600;
+    color: var(--navy-800);
+}
+
+/* Subsection */
+.text-h4 {
+    font-size: 1.25rem;    /* 20px */
+    font-weight: 600;
+    color: var(--navy-700);
+}
+
+/* Labels — uppercase, small, spaced */
+.text-label {
+    font-size: 0.75rem;    /* 12px */
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--navy-600);
+}
+
+.text-small {
+    font-size: 0.875rem;   /* 14px */
+    color: var(--navy-500);
+}
+
+.text-muted {
+    color: var(--navy-400);
+}
+
+
+/* ─── 4. Layout ──────────────────────────────────────────────────────────── */
+.dashboard {
+    max-width: var(--max-width);
+    margin: 0 auto;
+    padding: var(--space-10) var(--space-16);
+}
+
+
+/* ─── 5. Page Header ─────────────────────────────────────────────────────── */
+.dashboard-header {
+    background: linear-gradient(135deg, var(--navy-800), var(--navy-900));
+    color: #fff;
+    padding: var(--space-16) var(--space-8);
+    border-radius: var(--radius-lg);
+    border-bottom: 3px solid var(--navy-600);
+    margin-bottom: var(--space-10);
+    text-align: center;
+    position: relative;
+}
+
+.dashboard-header h1 {
+    font-size: 2.5rem;
+    font-weight: 700;
+    color: #fff;
+    margin-bottom: var(--space-2);
+    line-height: var(--leading-heading);
+}
+
+.dashboard-header p {
+    font-size: 1.125rem;
+    opacity: 0.85;
+    color: var(--navy-200);
+}
+
+/* Logout button in header */
+.logout-btn {
+    position: absolute;
+    top: var(--space-6);
+    right: var(--space-6);
+    background: rgba(255, 255, 255, 0.12);
+    color: #fff;
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    padding: var(--space-2) var(--space-5);
+    border-radius: var(--radius-md);
+    font-size: 0.875rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background var(--transition-normal);
+}
+
+.logout-btn:hover {
+    background: rgba(255, 255, 255, 0.22);
+}
+
+
+/* ─── 6. Cards & Surfaces ────────────────────────────────────────────────── */
+.card {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-card);
+}
+
+.card:hover {
+    border-color: var(--border-hover);
+}
+
+
+/* ─── 7. Filter Section ──────────────────────────────────────────────────── */
+.filters-section {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-card);
+    padding: var(--space-8);
+    margin-bottom: var(--space-10);
+}
+
+.filters-section-title {
+    font-size: 0.8125rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--navy-600);
+    margin-bottom: var(--space-6);
+    padding-bottom: var(--space-4);
+    border-bottom: 2px solid var(--border-default);
+}
+
+.filters-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: var(--space-6);
+}
+
+.filter-group {
+    display: flex;
+    flex-direction: column;
+}
+
+.filter-group label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--navy-600);
+    margin-bottom: var(--space-2);
+}
+
+.filter-group select,
+.filter-group input {
+    width: 100%;
+    padding: var(--space-3) var(--space-4);
+    border: 2px solid var(--border-default);
+    border-radius: var(--radius-md);
+    font-size: 0.9375rem;
+    font-family: var(--font-family);
+    color: var(--navy-900);
+    background: var(--bg-surface);
+    transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+    appearance: auto;
+}
+
+.filter-group select:focus,
+.filter-group input:focus {
+    outline: none;
+    border-color: var(--navy-600);
+    box-shadow: var(--shadow-focus);
+}
+
+.filter-group input::placeholder {
+    color: var(--navy-300);
+}
+
+
+/* ─── 8. Results Section ─────────────────────────────────────────────────── */
+.results-section {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-card);
+    padding: var(--space-8);
+}
+
+.results-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--space-8);
+    padding-bottom: var(--space-6);
+    border-bottom: 2px solid var(--border-default);
+}
+
+.results-header h2 {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: var(--navy-800);
+}
+
+
+/* ─── 9. Deal Cards ──────────────────────────────────────────────────────── */
+.deals-grid {
+    display: grid;
+    gap: var(--space-6);
+}
+
+.deal-card {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-default);
+    border-left: 4px solid var(--navy-700);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    transition: box-shadow var(--transition-normal), transform var(--transition-normal);
+}
+
+.deal-card:hover {
+    box-shadow: var(--shadow-card-hover);
+    transform: translateY(-2px);
+}
+
+/* Deal header (collapsible toggle) */
+.deal-header-toggle {
+    padding: var(--space-6) var(--space-8);
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: var(--bg-surface);
+    border-bottom: 1px solid var(--border-default);
+    user-select: none;
+    transition: background var(--transition-fast);
+}
+
+.deal-header-toggle:hover {
+    background: var(--bg-muted);
+}
+
+.deal-title-section {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: var(--space-4);
+}
+
+.deal-title-section h3 {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--navy-800);
+    margin: 0;
+    line-height: var(--leading-heading);
+}
+
+.deal-title-section h3 a {
+    color: var(--navy-800);
+    text-decoration: none;
+}
+
+.deal-title-section h3 a:hover {
+    color: var(--navy-600);
+    text-decoration: none;
+}
+
+/* Amount badge */
+.deal-amount {
+    background: var(--navy-700);
+    color: #fff;
+    padding: var(--space-2) var(--space-5);
+    border-radius: 999px;
+    font-weight: 700;
+    font-size: 1rem;
+    white-space: nowrap;
+}
+
+/* Toggle icon */
+.toggle-icon {
+    font-size: 1.25rem;
+    color: var(--navy-400);
+    transition: transform var(--transition-slow);
+    margin-left: var(--space-4);
+}
+
+.toggle-icon.expanded {
+    transform: rotate(180deg);
+}
+
+/* Collapsible content */
+.deal-content {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.4s ease-out;
+}
+
+.deal-content.expanded {
+    max-height: none;
+    overflow: visible;
+}
+
+/* Deal info area (inside expanded card) */
+.deal-info-section {
+    padding: var(--space-8);
+    border-bottom: 2px solid var(--border-default);
+}
+
+/* Info grid — 3 columns */
+.deal-info-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: var(--space-6);
+}
+
+/* Individual info sections */
+.info-section {
+    background: var(--bg-muted);
+    padding: var(--space-5);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-default);
+}
+
+.info-section h4 {
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--navy-600);
+    margin-bottom: var(--space-4);
+    padding-bottom: var(--space-3);
+    border-bottom: 2px solid var(--border-default);
+}
+
+.info-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--space-2) 0;
+    font-size: 0.875rem;
+}
+
+.info-item .label {
+    font-weight: 600;
+    color: var(--navy-500);
+}
+
+.info-item span:last-child {
+    color: var(--navy-900);
+    text-align: right;
+    font-weight: 500;
+}
+
+
+/* ─── 10. Lookalike Section ──────────────────────────────────────────────── */
+.lookalike-section {
+    padding: var(--space-8);
+    background: var(--bg-muted);
+}
+
+.lookalike-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--space-6);
+}
+
+.lookalike-header h4 {
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: var(--navy-800);
+}
+
+.lookalike-placeholder {
+    text-align: center;
+    padding: var(--space-10) var(--space-6);
+    color: var(--navy-400);
+    font-size: 1rem;
+    font-style: italic;
+}
+
+/* Lookalike filters bar */
+.lookalike-filters {
+    display: flex;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+    margin-bottom: var(--space-4);
+    align-items: center;
+}
+
+.lookalike-filters select {
+    padding: 6px 10px;
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-sm);
+    font-size: 0.8125rem;
+    font-family: var(--font-family);
+    background: var(--bg-surface);
+    color: var(--navy-800);
+    cursor: pointer;
+    max-width: 180px;
+    transition: border-color var(--transition-fast);
+}
+
+.lookalike-filters select:focus {
+    border-color: var(--navy-600);
+    outline: none;
+    box-shadow: var(--shadow-focus);
+}
+
+.lookalike-filter-clear {
+    padding: 6px 12px;
+    border: 1px solid var(--accent-red);
+    border-radius: var(--radius-sm);
+    font-size: 0.8125rem;
+    background: var(--bg-surface);
+    color: var(--accent-red);
+    cursor: pointer;
+    font-weight: 500;
+    transition: all var(--transition-normal);
+}
+
+.lookalike-filter-clear:hover {
+    background: var(--accent-red);
+    color: #fff;
+}
+
+/* Lookalike results list */
+.lookalike-results {
+    display: grid;
+    gap: var(--space-4);
+}
+
+/* Individual lookalike card */
+.lookalike-card {
+    background: var(--bg-surface);
+    padding: var(--space-6);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-default);
+    border-left: 3px solid var(--navy-600);
+    transition: box-shadow var(--transition-normal);
+}
+
+.lookalike-card:hover {
+    box-shadow: var(--shadow-card-hover);
+}
+
+.lookalike-card h5 {
+    font-size: 1.0625rem;
+    font-weight: 600;
+    color: var(--navy-800);
+    margin: 0;
+}
+
+.lookalike-meta {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: var(--space-2) var(--space-4);
+    margin-top: var(--space-3);
+    font-size: 0.875rem;
+    color: var(--navy-500);
+}
+
+.lookalike-meta a {
+    color: var(--navy-600);
+}
+
+.lookalike-meta a:hover {
+    color: var(--navy-800);
+}
+
+.match-reasons {
+    font-size: 0.8125rem;
+    color: var(--navy-400);
+    margin-top: var(--space-2);
+}
+
+.expanded-specialties-note {
+    font-size: 0.875rem;
+    color: var(--navy-600);
+    margin-bottom: var(--space-4);
+    padding: var(--space-3) var(--space-4);
+    background: var(--bg-subtle);
+    border-radius: var(--radius-sm);
+    border-left: 3px solid var(--navy-600);
+}
+
+
+/* ─── 11. Buttons ────────────────────────────────────────────────────────── */
+.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--space-3) var(--space-6);
+    border-radius: var(--radius-md);
+    font-size: 1rem;
+    font-weight: 600;
+    font-family: var(--font-family);
+    cursor: pointer;
+    transition: all var(--transition-normal);
+    border: 2px solid transparent;
+    line-height: 1.4;
+}
+
+/* Primary button — navy */
+.btn-primary,
+.find-lookalikes-btn {
+    background: var(--navy-700);
+    color: #fff;
+    border: 2px solid var(--navy-700);
+    padding: var(--space-3) var(--space-6);
+    border-radius: var(--radius-md);
+    font-size: 1rem;
+    font-weight: 600;
+    font-family: var(--font-family);
+    cursor: pointer;
+    transition: all var(--transition-normal);
+}
+
+.btn-primary:hover,
+.find-lookalikes-btn:hover {
+    background: var(--navy-800);
+    border-color: var(--navy-800);
+    box-shadow: var(--shadow-card);
+    transform: translateY(-1px);
+}
+
+.btn-primary:disabled,
+.find-lookalikes-btn:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}
+
+/* Secondary button — outlined */
+.btn-secondary {
+    background: var(--bg-surface);
+    color: var(--navy-700);
+    border: 2px solid var(--navy-700);
+    padding: var(--space-3) var(--space-6);
+    border-radius: var(--radius-md);
+    font-size: 1rem;
+    font-weight: 600;
+    font-family: var(--font-family);
+    cursor: pointer;
+    transition: all var(--transition-normal);
+}
+
+.btn-secondary:hover {
+    background: var(--navy-700);
+    color: #fff;
+    transform: translateY(-1px);
+}
+
+/* Clay seed button */
+.clay-seed-btn {
+    padding: 5px 12px;
+    border: 1px solid var(--navy-600);
+    border-radius: var(--radius-sm);
+    font-size: 0.8125rem;
+    font-weight: 600;
+    cursor: pointer;
+    background: var(--navy-600);
+    color: #fff;
+    white-space: nowrap;
+    transition: all var(--transition-normal);
+}
+
+.clay-seed-btn:hover:not(:disabled) {
+    background: var(--navy-800);
+    border-color: var(--navy-800);
+    transform: translateY(-1px);
+}
+
+.clay-seed-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none;
+    background: var(--accent-green);
+    border-color: var(--accent-green);
+}
+
+/* Clay search button */
+.clay-search-btn {
+    background: var(--navy-700);
+    color: #fff;
+    border: 2px solid var(--navy-700);
+    padding: var(--space-3) var(--space-5);
+    border-radius: var(--radius-md);
+    font-size: 0.9375rem;
+    font-weight: 600;
+    font-family: var(--font-family);
+    cursor: pointer;
+    transition: all var(--transition-normal);
+}
+
+.clay-search-btn:hover {
+    background: var(--navy-800);
+    border-color: var(--navy-800);
+    box-shadow: var(--shadow-card);
+    transform: translateY(-1px);
+}
+
+.clay-search-btn:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}
+
+
+/* ─── 12. Contacts Section ───────────────────────────────────────────────── */
+.contacts-toggle {
+    margin-top: var(--space-4);
+    padding: var(--space-3) var(--space-4);
+    background: var(--bg-subtle);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--navy-700);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    user-select: none;
+    transition: background var(--transition-fast);
+}
+
+.contacts-toggle:hover {
+    background: var(--bg-muted);
+}
+
+.contacts-list {
+    margin-top: var(--space-3);
+    display: grid;
+    gap: var(--space-2);
+}
+
+.contact-row {
+    display: grid;
+    grid-template-columns: 1.2fr 1fr 1.5fr 1fr 0.8fr;
+    gap: var(--space-2);
+    align-items: center;
+    padding: var(--space-3) var(--space-4);
+    background: var(--bg-muted);
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-default);
+    font-size: 0.8125rem;
+}
+
+.contact-row-header {
+    font-weight: 700;
+    font-size: 0.75rem;
+    color: var(--navy-400);
+    background: transparent;
+    border: none;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.contact-row .contact-name {
+    font-weight: 600;
+    color: var(--navy-800);
+}
+
+.contact-row .contact-title {
+    color: var(--navy-500);
+    font-style: italic;
+}
+
+.contact-row a {
+    color: var(--navy-600);
+    text-decoration: none;
+}
+
+.contact-row a:hover {
+    text-decoration: underline;
+    color: var(--navy-800);
+}
+
+.contact-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.contact-badge.physician {
+    background: #e8f5e9;
+    color: #2e7d32;
+}
+
+.contact-badge.executive {
+    background: #fff3e0;
+    color: #e65100;
+}
+
+.fallback-badge {
+    color: var(--accent-amber);
+    font-size: 0.8125rem;
+    font-weight: 500;
+    cursor: help;
+}
+
+
+/* ─── 13. Clay Contact Search Section ────────────────────────────────────── */
+.clay-search-section {
+    margin-top: var(--space-5);
+    padding-top: var(--space-4);
+    border-top: 1px solid var(--border-default);
+}
+
+.clay-search-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--space-3);
+}
+
+.clay-search-label {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--navy-600);
+}
+
+.clay-rerun-prompt {
+    background: #fffbeb;
+    border: 1px solid #fde68a;
+    border-radius: var(--radius-md);
+    padding: var(--space-3) var(--space-4);
+    margin-bottom: var(--space-4);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.875rem;
+    color: #92400e;
+}
+
+.clay-rerun-prompt button {
+    background: #fbbf24;
+    color: #78350f;
+    border: none;
+    padding: 5px 14px;
+    border-radius: var(--radius-sm);
+    font-size: 0.8125rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all var(--transition-normal);
+    white-space: nowrap;
+    margin-left: var(--space-4);
+}
+
+.clay-rerun-prompt button:hover {
+    background: #f59e0b;
+    color: #451a03;
+}
+
+.clay-contact-card {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-md);
+    padding: var(--space-4) var(--space-5);
+    margin-bottom: var(--space-2);
+    transition: box-shadow var(--transition-normal);
+}
+
+.clay-contact-card:hover {
+    box-shadow: var(--shadow-card);
+}
+
+.clay-contact-card h6 {
+    font-size: 0.9375rem;
+    font-weight: 600;
+    color: var(--navy-800);
+    margin: 0 0 var(--space-2) 0;
+}
+
+.clay-contact-meta {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 4px var(--space-4);
+    font-size: 0.8125rem;
+    color: var(--navy-500);
+}
+
+.clay-contact-meta a {
+    color: var(--navy-600);
+}
+
+.clay-contact-meta a:hover {
+    text-decoration: underline;
+}
+
+.clay-contact-meta .first-seen {
+    color: var(--navy-300);
+    font-size: 0.75rem;
+    font-style: italic;
+}
+
+
+/* ─── 14. Status & Loading ───────────────────────────────────────────────── */
+.loading {
+    color: var(--navy-600);
+    font-weight: 600;
+}
+
+.no-results {
+    text-align: center;
+    padding: var(--space-16) var(--space-6);
+    color: var(--navy-400);
+    font-size: 1.125rem;
+}
+
+.text-error {
+    color: var(--accent-red);
+    font-size: 0.8125rem;
+}
+
+.text-searching {
+    color: var(--navy-600);
+    font-weight: 600;
+    font-size: 0.8125rem;
+}
+
+.lookalike-summary {
+    font-size: 0.875rem;
+    color: var(--navy-500);
+    margin-bottom: var(--space-3);
+}
+
+
+/* ─── 15. Pagination ─────────────────────────────────────────────────────── */
+.pagination {
+    display: flex;
+    justify-content: center;
+    gap: var(--space-3);
+    margin-top: var(--space-6);
+}
+
+.pagination .btn-primary {
+    padding: var(--space-2) var(--space-5);
+    font-size: 0.875rem;
+}
+
+
+/* ─── 16. Login Page ─────────────────────────────────────────────────────── */
+.login-page {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, var(--navy-800), var(--navy-900));
+}
+
+.login-card {
+    background: var(--bg-surface);
+    border-radius: var(--radius-xl);
+    padding: var(--space-12) var(--space-10);
+    width: 100%;
+    max-width: 440px;
+    box-shadow: var(--shadow-modal);
+}
+
+.login-card h1 {
+    font-size: 1.75rem;
+    font-weight: 700;
+    color: var(--navy-900);
+    margin-bottom: var(--space-2);
+    text-align: center;
+}
+
+.login-card p {
+    color: var(--navy-400);
+    text-align: center;
+    margin-bottom: var(--space-8);
+    font-size: 0.9375rem;
+}
+
+.form-group {
+    margin-bottom: var(--space-6);
+}
+
+.form-group label {
+    display: block;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--navy-600);
+    margin-bottom: var(--space-2);
+}
+
+.form-group input {
+    width: 100%;
+    padding: var(--space-4) var(--space-5);
+    border: 2px solid var(--border-default);
+    border-radius: var(--radius-md);
+    font-size: 1rem;
+    font-family: var(--font-family);
+    color: var(--navy-900);
+    transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+    outline: none;
+}
+
+.form-group input:focus {
+    border-color: var(--navy-600);
+    box-shadow: var(--shadow-focus);
+}
+
+.form-group input::placeholder {
+    color: var(--navy-300);
+}
+
+.login-btn {
+    width: 100%;
+    padding: var(--space-4);
+    background: var(--navy-700);
+    color: #fff;
+    border: 2px solid var(--navy-700);
+    border-radius: var(--radius-md);
+    font-size: 1rem;
+    font-weight: 600;
+    font-family: var(--font-family);
+    cursor: pointer;
+    transition: all var(--transition-normal);
+    margin-top: var(--space-2);
+}
+
+.login-btn:hover {
+    background: var(--navy-800);
+    border-color: var(--navy-800);
+}
+
+.login-btn:active {
+    transform: scale(0.98);
+}
+
+.login-btn:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.error-msg {
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+    color: var(--accent-red);
+    padding: var(--space-4) var(--space-5);
+    border-radius: var(--radius-md);
+    font-size: 0.875rem;
+    margin-bottom: var(--space-6);
+    display: none;
+    text-align: center;
+}
+
+.error-msg.visible {
+    display: block;
+}
+
+.spinner {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+    margin-right: var(--space-2);
+    vertical-align: middle;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+
+/* ─── 17. Responsive Breakpoints ─────────────────────────────────────────── */
+
+/* Tablet: 768px – 1023px */
+@media (max-width: 1023px) {
+    .dashboard {
+        padding: var(--space-8) var(--space-8);
+    }
+
+    .filters-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .deal-info-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+/* Mobile: < 768px */
+@media (max-width: 767px) {
+    .dashboard {
+        padding: var(--space-4) var(--space-4);
+    }
+
+    .dashboard-header {
+        padding: var(--space-8) var(--space-5);
+    }
+
+    .dashboard-header h1 {
+        font-size: 1.75rem;
+    }
+
+    .logout-btn {
+        top: var(--space-3);
+        right: var(--space-3);
+        padding: var(--space-1) var(--space-3);
+        font-size: 0.75rem;
+    }
+
+    .filters-section,
+    .results-section {
+        padding: var(--space-5);
+    }
+
+    .filters-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .deal-header-toggle {
+        padding: var(--space-4) var(--space-5);
+    }
+
+    .deal-title-section {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: var(--space-2);
+    }
+
+    .deal-info-section,
+    .lookalike-section {
+        padding: var(--space-5);
+    }
+
+    .deal-info-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .contact-row {
+        grid-template-columns: 1fr;
+        gap: var(--space-1);
+    }
+
+    .login-card {
+        margin: var(--space-4);
+        padding: var(--space-8) var(--space-6);
+    }
+
+    .lookalike-card {
+        padding: var(--space-4);
+    }
+}
+
+/* Large desktop: 1440px+ */
+@media (min-width: 1440px) {
+    .filters-grid {
+        grid-template-columns: repeat(5, 1fr);
+    }
+}
