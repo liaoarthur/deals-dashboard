@@ -1,0 +1,68 @@
+# ─── Lead Scoring Configuration ───────────────────────────────────────────────
+# Edit weights and thresholds here without touching code.
+
+# Weight configuration per lead type.
+# Each set of weights must sum to 1.0.
+weights:
+  inbound:
+    opportunity_size: 0.3
+    message_analysis: 0.4
+    person_role: 0.3
+  product:
+    opportunity_size: 0.5
+    person_role: 0.5
+  event:
+    opportunity_size: 0.5
+    person_role: 0.5
+  other:
+    opportunity_size: 0.5
+    person_role: 0.5
+
+# ─── Opportunity Size Scoring ─────────────────────────────────────────────────
+opportunity_size:
+  # If a form submission exists, start with this base score
+  form_submission_base_score: 70
+
+  # Employee count → score mapping (upper bound → score)
+  employee_tiers:
+    - { max: 10,    score: 20 }
+    - { max: 50,    score: 35 }
+    - { max: 200,   score: 50 }
+    - { max: 1000,  score: 70 }
+    - { max: 5000,  score: 85 }
+    - { max: 999999, score: 95 }
+
+  # Annual revenue → score mapping (upper bound in USD → score)
+  revenue_tiers:
+    - { max: 1000000,    score: 20 }
+    - { max: 10000000,   score: 40 }
+    - { max: 50000000,   score: 60 }
+    - { max: 200000000,  score: 80 }
+    - { max: 999999999999, score: 95 }
+
+# ─── Person / Role Scoring ────────────────────────────────────────────────────
+person_role:
+  seniority_scores:
+    founder:    95
+    c_suite:    95
+    vp:         80
+    director:   70
+    manager:    55
+    senior:     45
+    individual: 30
+    unknown:    25
+
+  # Keywords that map to seniority levels (case-insensitive)
+  title_keywords:
+    founder:    ["founder", "co-founder", "cofounder", "owner"]
+    c_suite:    ["ceo", "cto", "cfo", "coo", "cmo", "cro", "chief"]
+    vp:         ["vp", "vice president"]
+    director:   ["director", "head of"]
+    manager:    ["manager", "lead", "team lead"]
+    senior:     ["senior", "sr.", "principal", "staff"]
+    individual: ["analyst", "associate", "coordinator", "specialist", "engineer", "developer"]
+
+# ─── Deduplication ────────────────────────────────────────────────────────────
+dedup:
+  # Ignore duplicate webhook events for the same contact within this window (seconds)
+  window_seconds: 60

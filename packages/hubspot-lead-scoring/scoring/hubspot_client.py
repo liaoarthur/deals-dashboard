@@ -1,0 +1,204 @@
+"""HubSpot API client — fetch lead, contact, form submission, and company data.
+
+Flow: Lead (primary) → associated Contact (enrichment + forms) → associated Company (size/revenue)
+"""
+
+import os
+import sys
+import requests
+
+HUBSPOT_TOKEN = os.getenv("HUBSPOT_ACCESS_TOKEN")
+BASE_URL = "https://api.hubapi.com"
+
+
+def _headers():
+    if not HUBSPOT_TOKEN:
+        raise ValueError("HUBSPOT_ACCESS_TOKEN environment variable not set")
+    return {
+        "Authorization": f"Bearer {HUBSPOT_TOKEN}",
+        "Content-Type": "application/json",
+    }
+
+
+# ─── Lead ─────────────────────────────────────────────────────────────────────
+
+LEAD_PROPERTIES = [
+    "hs_lead_name", "hs_lead_type", "hs_lead_label", "hs_lead_status",
+    "hs_pipeline", "hs_pipeline_stage",
+]
+
+
+def get_lead(lead_id):
+    """Fetch a single lead with all scoring-relevant properties."""
+    url = f"{BASE_URL}/crm/v3/objects/leads/{lead_id}"
+    resp = requests.get(url, headers=_headers(), params={
+        "properties": ",".join(LEAD_PROPERTIES),
+    })
+    resp.raise_for_status()
+    return resp.json()
+
+
+def get_associated_contact_from_lead(lead_id):
+    """Resolve the contact associated with a lead. Returns contact_id or None."""
+    url = f"{BASE_URL}/crm/v3/objects/leads/{lead_id}/associations/contacts"
+    resp = requests.get(url, headers=_headers())
+    if resp.status_code != 200:
+        print(f"[hubspot] Could not fetch contact association for lead {lead_id}: {resp.status_code}", file=sys.stderr)
+        return None
+
+    results = resp.json().get("results", [])
+    if not results:
+        return None
+
+    return results[0].get("toObjectId") or results[0].get("id")
+
+
+def get_associated_company_from_lead(lead_id):
+    """Resolve the company associated with a lead. Returns company_id or None."""
+    url = f"{BASE_URL}/crm/v3/objects/leads/{lead_id}/associations/companies"
+    resp = requests.get(url, headers=_headers())
+    if resp.status_code != 200:
+        return None
+
+    results = resp.json().get("results", [])
+    if not results:
+        return None
+
+    return results[0].get("toObjectId") or results[0].get("id")
+
+
+# ─── Contact ─────────────────────────────────────────────────────────────────
+
+CONTACT_PROPERTIES = [
+    "email", "firstname", "lastname", "jobtitle", "company",
+    "phone", "hs_lead_status", "lifecyclestage",
+    "hs_analytics_source", "hs_analytics_source_data_1",
+    "hs_analytics_source_data_2",
+    "linkedin", "hs_linkedinid",
+    "numemployees", "annualrevenue",
+    "recent_conversion_event_name", "hs_latest_source",
+    "message", "hs_content_membership_notes",
+]
+
+
+def get_contact(contact_id):
+    """Fetch a single contact with all scoring-relevant properties."""
+    url = f"{BASE_URL}/crm/v3/objects/contacts/{contact_id}"
+    resp = requests.get(url, headers=_headers(), params={
+        "properties": ",".join(CONTACT_PROPERTIES),
+    })
+    resp.raise_for_status()
+    return resp.json()
+
+
+# ─── Form submissions ────────────────────────────────────────────────────────
+
+def get_form_submissions(contact_id):
+    """Return list of form submissions for a contact (via the v1 forms API)."""
+    url = f"{BASE_URL}/contacts/v1/contact/vid/{contact_id}/profile"
+    resp = requests.get(url, headers=_headers())
+    if resp.status_code != 200:
+        print(f"[hubspot] Could not fetch form submissions for contact {contact_id}: {resp.status_code}", file=sys.stderr)
+        return []
+
+    data = resp.json()
+    submissions = []
+    for entry in data.get("form-submissions", []):
+        fields = {}
+        for f in entry.get("form-fields", []):
+            fields[f.get("name", "")] = f.get("value", "")
+        submissions.append({
+            "form_id": entry.get("form-id"),
+            "title": entry.get("title", ""),
+            "timestamp": entry.get("timestamp"),
+            "fields": fields,
+        })
+
+    return submissions
+
+
+# ─── Company ──────────────────────────────────────────────────────────────────
+
+COMPANY_PROPERTIES = "name,domain,numberofemployees,annualrevenue,industry,city,state,country"
+
+
+def get_company(company_id):
+    """Fetch a company by ID."""
+    url = f"{BASE_URL}/crm/v3/objects/companies/{company_id}"
+    resp = requests.get(url, headers=_headers(), params={
+        "properties": COMPANY_PROPERTIES,
+    })
+    if resp.status_code != 200:
+        return None
+    return resp.json()
+
+
+def get_associated_company_from_contact(contact_id):
+    """Fetch the primary associated company for a contact."""
+    url = f"{BASE_URL}/crm/v3/objects/contacts/{contact_id}/associations/companies"
+    resp = requests.get(url, headers=_headers())
+    if resp.status_code != 200:
+        return None
+
+    results = resp.json().get("results", [])
+    if not results:
+        return None
+
+    company_id = results[0].get("toObjectId") or results[0].get("id")
+    if not company_id:
+        return None
+
+    return get_company(company_id)
+
+
+# ─── Full context bundle ─────────────────────────────────────────────────────
+
+def fetch_lead_context(lead_id):
+    """
+    Fetch everything needed for scoring, starting from a Lead object:
+    Lead → associated Contact (for enrichment + form submissions) → Company (for size/revenue).
+
+    Returns a unified context dict with lead as primary.
+    """
+    # 1. Fetch Lead
+    lead = get_lead(lead_id)
+    lead_props = lead.get("properties", {})
+
+    # 2. Resolve associated Contact
+    contact_id = get_associated_contact_from_lead(lead_id)
+    contact_props = {}
+    form_submissions = []
+
+    if contact_id:
+        try:
+            contact = get_contact(contact_id)
+            contact_props = contact.get("properties", {})
+        except Exception as e:
+            print(f"[hubspot] Failed to fetch contact {contact_id} for lead {lead_id}: {e}", file=sys.stderr)
+
+        form_submissions = get_form_submissions(contact_id)
+
+    # 3. Resolve Company (try Lead → Company first, fall back to Contact → Company)
+    company_props = {}
+    company_id = get_associated_company_from_lead(lead_id)
+
+    if company_id:
+        company = get_company(company_id)
+        if company:
+            company_props = company.get("properties", {})
+    elif contact_id:
+        company = get_associated_company_from_contact(contact_id)
+        if company:
+            company_props = company.get("properties", {})
+
+    # 4. Merge properties — lead props take precedence, contact fills gaps
+    merged_props = {**contact_props, **{k: v for k, v in lead_props.items() if v is not None}}
+
+    return {
+        "lead_id": lead_id,
+        "contact_id": contact_id,
+        "lead_properties": lead_props,
+        "properties": merged_props,
+        "form_submissions": form_submissions,
+        "company": company_props,
+    }
