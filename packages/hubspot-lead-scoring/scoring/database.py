@@ -34,11 +34,22 @@ def _init_tables(db):
             modules_run       TEXT NOT NULL,
             weights_used      TEXT NOT NULL,
             raw_inputs        TEXT NOT NULL DEFAULT '{}',
+            tier              TEXT NOT NULL DEFAULT '',
+            rationale         TEXT NOT NULL DEFAULT '',
             scored_at         TEXT NOT NULL,
             created_at        TEXT NOT NULL DEFAULT (datetime('now')),
             updated_at        TEXT NOT NULL DEFAULT (datetime('now'))
         )
     """)
+
+    # Migrate existing tables that lack the new columns
+    for col, typedef in [("tier", "TEXT NOT NULL DEFAULT ''"),
+                         ("rationale", "TEXT NOT NULL DEFAULT ''")]:
+        try:
+            db.execute(f"ALTER TABLE scored_records ADD COLUMN {col} {typedef}")
+        except sqlite3.OperationalError:
+            pass  # Column already exists
+
     db.commit()
 
 
@@ -49,8 +60,9 @@ def upsert_score(record):
 
     db.execute("""
         INSERT INTO scored_records
-            (hubspot_record_id, lead_type, score, sub_scores, modules_run, weights_used, raw_inputs, scored_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (hubspot_record_id, lead_type, score, sub_scores, modules_run,
+             weights_used, raw_inputs, tier, rationale, scored_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(hubspot_record_id) DO UPDATE SET
             lead_type     = excluded.lead_type,
             score         = excluded.score,
@@ -58,6 +70,8 @@ def upsert_score(record):
             modules_run   = excluded.modules_run,
             weights_used  = excluded.weights_used,
             raw_inputs    = excluded.raw_inputs,
+            tier          = excluded.tier,
+            rationale     = excluded.rationale,
             scored_at     = excluded.scored_at,
             updated_at    = excluded.updated_at
     """, (
@@ -68,10 +82,28 @@ def upsert_score(record):
         json.dumps(record['modules_run']),
         json.dumps(record['weights_used']),
         json.dumps(record.get('raw_inputs', {})),
+        record.get('tier', ''),
+        record.get('rationale', ''),
         record['scored_at'],
         now,
     ))
     db.commit()
+
+
+def _row_to_dict(row):
+    """Convert a DB row to the standard scored record dict."""
+    return {
+        'hubspot_record_id': row['hubspot_record_id'],
+        'lead_type': row['lead_type'],
+        'score': row['score'],
+        'tier': row['tier'],
+        'tier_display': f"{row['tier']} [{int(row['score'])}]" if row['tier'] else f"[{int(row['score'])}]",
+        'rationale': row['rationale'],
+        'sub_scores': json.loads(row['sub_scores']),
+        'modules_run': json.loads(row['modules_run']),
+        'weights_used': json.loads(row['weights_used']),
+        'scored_at': row['scored_at'],
+    }
 
 
 def get_score(hubspot_record_id):
@@ -85,16 +117,9 @@ def get_score(hubspot_record_id):
     if row is None:
         return None
 
-    return {
-        'hubspot_record_id': row['hubspot_record_id'],
-        'lead_type': row['lead_type'],
-        'score': row['score'],
-        'sub_scores': json.loads(row['sub_scores']),
-        'modules_run': json.loads(row['modules_run']),
-        'weights_used': json.loads(row['weights_used']),
-        'raw_inputs': json.loads(row['raw_inputs']),
-        'scored_at': row['scored_at'],
-    }
+    result = _row_to_dict(row)
+    result['raw_inputs'] = json.loads(row['raw_inputs'])
+    return result
 
 
 def get_all_scores(limit=100):
@@ -105,15 +130,4 @@ def get_all_scores(limit=100):
         (limit,)
     ).fetchall()
 
-    return [
-        {
-            'hubspot_record_id': row['hubspot_record_id'],
-            'lead_type': row['lead_type'],
-            'score': row['score'],
-            'sub_scores': json.loads(row['sub_scores']),
-            'modules_run': json.loads(row['modules_run']),
-            'weights_used': json.loads(row['weights_used']),
-            'scored_at': row['scored_at'],
-        }
-        for row in rows
-    ]
+    return [_row_to_dict(row) for row in rows]

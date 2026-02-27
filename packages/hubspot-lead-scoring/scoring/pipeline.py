@@ -5,13 +5,15 @@ import time
 import threading
 from datetime import datetime, timezone
 
-from .config import get_weights, get_dedup_window
-from .hubspot_client import fetch_lead_context
+from .config import get_weights, get_dedup_window, get_weight_adjustments, get_score_floors
+from .hubspot_client import fetch_lead_context, write_lead_score
 from .router import classify_lead_type, get_modules_for_lead_type, extract_message_text
 from .score_opportunity_size import score as score_opportunity_size
 from .score_message import score as score_message
 from .score_person_role import score as score_person_role
+from .score_specialty_company import score as score_specialty_company
 from .database import upsert_score
+from .tier import classify_tier, format_tier_display, build_rationale
 
 
 # ─── Deduplication ────────────────────────────────────────────────────────────
@@ -90,15 +92,25 @@ def _run_pipeline(lead_id):
             print(f"[pipeline] Module '{module_name}' failed: {e}", file=sys.stderr)
             errors.append({"module": module_name, "error": str(e)})
 
-    # 5. Compute weighted composite score
+    # 5. Compute weighted composite score (with contextual adjustments)
     weights = get_weights(lead_type)
-    composite_score, weights_used = _compute_composite(sub_scores, weights, modules_succeeded)
+    adjusted_weights = _adjust_weights(weights, context, sub_scores)
+    composite_score, weights_used = _compute_composite(sub_scores, adjusted_weights, modules_succeeded)
 
-    # 6. Build the scored record
+    # 5b. Apply score floors — strong person_role or message_analysis guarantees B-Monitor
+    composite_score = _apply_score_floors(composite_score, sub_scores)
+
+    # 6. Classify tier
+    tier_label = classify_tier(composite_score)
+    tier_display = format_tier_display(tier_label, composite_score)
+
+    # 7. Build the scored record
     record = {
         "hubspot_record_id": lead_id,
         "lead_type": lead_type,
         "score": composite_score,
+        "tier": tier_label,
+        "tier_display": tier_display,
         "sub_scores": sub_scores,
         "modules_run": modules_succeeded,
         "weights_used": weights_used,
@@ -109,14 +121,24 @@ def _run_pipeline(lead_id):
             "merged_properties": context.get("properties", {}),
             "form_count": len(context.get("form_submissions", [])),
             "has_company": bool(context.get("company")),
+            "person_lookup": context.get("_enrichment", {}).get("person_lookup"),
             "errors": errors,
         },
     }
 
-    # 7. Store locally
+    # 8. Generate rationale from the complete record
+    record["rationale"] = build_rationale(record)
+
+    # 9. Store locally
     upsert_score(record)
 
-    print(f"[pipeline] Scored lead {lead_id}: {composite_score}/100 ({lead_type})", file=sys.stderr)
+    # 10. Write score back to HubSpot Lead record
+    try:
+        write_lead_score(lead_id, tier_display, record["rationale"])
+    except Exception as e:
+        print(f"[pipeline] HubSpot writeback failed for lead {lead_id}: {e}", file=sys.stderr)
+
+    print(f"[pipeline] {tier_display} — lead {lead_id} ({lead_type})", file=sys.stderr)
     return record
 
 
@@ -132,8 +154,67 @@ def _run_module(module_name, context):
     elif module_name == "person_role":
         return score_person_role(context)
 
+    elif module_name == "specialty_company":
+        return score_specialty_company(context)
+
     else:
         raise ValueError(f"Unknown scoring module: {module_name}")
+
+
+def _adjust_weights(base_weights, context, sub_scores):
+    """
+    Contextual weight adjustments based on lead signals.
+
+    1. Physician at a large health system who isn't a decision-maker
+       → reduce opportunity_size weight
+       (org size inflates opportunity score but this person can't drive a deal)
+
+    2. High/low intent message → boost/reduce message_analysis weight
+
+    Returns a new weights dict (does not mutate the original).
+    """
+    adj = get_weight_adjustments()
+    weights = dict(base_weights)
+
+    person_lookup = context.get("_enrichment", {}).get("person_lookup")
+
+    is_non_notable_at_large_system = False
+
+    if person_lookup:
+        seniority = person_lookup.get("seniority", "unknown")
+        is_clinical = person_lookup.get("is_clinical", False)
+        is_decision_maker = person_lookup.get("is_decision_maker", False)
+
+        # Check: physician (clinical + non-decision-maker) at a large system
+        if is_clinical and not is_decision_maker and seniority in ("individual", "senior", "unknown"):
+            is_non_notable_at_large_system = True
+
+    adjustments_applied = []
+
+    # Reduction: Non-notable physician at large system → opportunity_size matters less
+    if is_non_notable_at_large_system and "opportunity_size" in weights:
+        reduction = adj.get("non_notable_physician_opp_size_reduction", 0.10)
+        weights["opportunity_size"] = max(0.05, weights["opportunity_size"] - reduction)
+        adjustments_applied.append(f"opp_size -{reduction} (non-notable physician at large system)")
+
+    # Boost/reduce message_analysis weight based on intent level
+    msg_score = sub_scores.get("message_analysis")
+    if msg_score is not None and "message_analysis" in weights:
+        high_threshold = adj.get("high_intent_message_threshold", 70)
+        low_threshold = adj.get("low_intent_message_threshold", 40)
+        if msg_score >= high_threshold:
+            boost = adj.get("high_intent_message_boost", 0.10)
+            weights["message_analysis"] += boost
+            adjustments_applied.append(f"message +{boost} (high intent, score={msg_score})")
+        elif msg_score < low_threshold:
+            reduction = adj.get("low_intent_message_reduction", 0.10)
+            weights["message_analysis"] = max(0.05, weights["message_analysis"] - reduction)
+            adjustments_applied.append(f"message -{reduction} (low intent, score={msg_score})")
+
+    if adjustments_applied:
+        print(f"[pipeline] Weight adjustments: {adjustments_applied}", file=sys.stderr)
+
+    return weights
 
 
 def _compute_composite(sub_scores, configured_weights, modules_run):
@@ -161,3 +242,36 @@ def _compute_composite(sub_scores, configured_weights, modules_run):
     composite = max(0, min(100, round(composite)))
 
     return composite, normalized
+
+
+def _apply_score_floors(composite_score, sub_scores):
+    """
+    If a key signal is strong enough, guarantee a minimum composite score.
+    A high person_role or message_analysis score means at least B-Monitor.
+    """
+    floors = get_score_floors()
+    if not floors:
+        return composite_score
+
+    floor_score = floors.get("floor_score", 50)
+    triggered_by = []
+
+    person_threshold = floors.get("person_role_threshold", 70)
+    person_score = sub_scores.get("person_role")
+    if person_score is not None and person_score >= person_threshold:
+        triggered_by.append(f"person_role={person_score}")
+
+    msg_threshold = floors.get("message_analysis_threshold", 70)
+    msg_score = sub_scores.get("message_analysis")
+    if msg_score is not None and msg_score >= msg_threshold:
+        triggered_by.append(f"message_analysis={msg_score}")
+
+    if triggered_by and composite_score < floor_score:
+        print(
+            f"[pipeline] Score floor applied: {composite_score} → {floor_score} "
+            f"(triggered by {', '.join(triggered_by)})",
+            file=sys.stderr,
+        )
+        return floor_score
+
+    return composite_score

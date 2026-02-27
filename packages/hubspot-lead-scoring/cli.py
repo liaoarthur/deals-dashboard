@@ -26,6 +26,10 @@ def main():
         print("No result — lead may have been dedup-skipped.", file=sys.stderr)
         sys.exit(1)
 
+    # Human-friendly summary
+    print(f"  {result.get('tier_display', 'N/A')}", file=sys.stderr)
+    print(f"  {result.get('rationale', '')}\n", file=sys.stderr)
+
     # Clean output for display
     output = dict(result)
     if not args.verbose:

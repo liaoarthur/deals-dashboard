@@ -1,9 +1,14 @@
 """Opportunity Size scoring module.
 
-Priority order:
-1. Form submission exists → high base score + any budget/size fields
-2. Enriched company data (employee count, revenue)
-3. Fallback minimum score
+Scores based on available sizing signals:
+1. Team size from Lead object (most relevant sizing signal)
+2. Company employee count (fallback)
+3. Annual revenue (supplementary)
+4. Fallback minimum score if no data available
+
+For large teams (500+), the score is gated on person notability — a
+mid-level clinician at a 2,000-person hospital doesn't signal a real
+buying opportunity the way a director at a 200-person group does.
 """
 
 import sys
@@ -13,45 +18,33 @@ from .config import get_opportunity_size_config
 def score(context):
     """Compute opportunity size sub-score (0-100)."""
     config = get_opportunity_size_config()
-    form_submissions = context.get("form_submissions", [])
     company = context.get("company", {})
     props = context.get("properties", {})
+    person_lookup = context.get("_enrichment", {}).get("person_lookup")
 
-    score_value = 0
     signals = []
 
-    # ─── Form submission signal (top tier) ────────────────────────────────
-    if form_submissions:
-        base = config.get("form_submission_base_score", 70)
-        score_value = base
-        signals.append(f"form_submission_base={base}")
-
-        # Check for budget/size fields in form data
-        budget_boost = _extract_budget_signal(form_submissions)
-        if budget_boost > 0:
-            score_value = min(100, score_value + budget_boost)
-            signals.append(f"budget_boost={budget_boost}")
-
-    # ─── Company data fallback ────────────────────────────────────────────
+    # ─── Sizing signals ───────────────────────────────────────────────────
+    team_size_score = _score_team_size(props, config, person_lookup)
     employee_score = _score_employees(company, props, config)
     revenue_score = _score_revenue(company, props, config)
 
-    if not form_submissions:
-        # No form: company data is the primary signal
-        if employee_score > 0 and revenue_score > 0:
-            score_value = int(employee_score * 0.4 + revenue_score * 0.6)
-        elif employee_score > 0:
-            score_value = employee_score
-        elif revenue_score > 0:
-            score_value = revenue_score
-        else:
-            score_value = 15  # Minimum fallback
-    else:
-        # Has form: company data can boost above base
-        company_signal = max(employee_score, revenue_score)
-        if company_signal > score_value:
-            score_value = int(score_value * 0.6 + company_signal * 0.4)
+    # Use team_size_score if available, otherwise fall back to employee_score
+    size_score = team_size_score if team_size_score > 0 else employee_score
 
+    if size_score > 0 and revenue_score > 0:
+        size_weight = 0.5 if team_size_score > 0 else 0.4
+        rev_weight = 1.0 - size_weight
+        score_value = int(size_score * size_weight + revenue_score * rev_weight)
+    elif size_score > 0:
+        score_value = size_score
+    elif revenue_score > 0:
+        score_value = revenue_score
+    else:
+        score_value = 15  # Minimum fallback
+
+    if team_size_score:
+        signals.append(f"team_size_score={team_size_score}")
     if employee_score:
         signals.append(f"employee_score={employee_score}")
     if revenue_score:
@@ -62,26 +55,56 @@ def score(context):
     return score_value
 
 
-def _extract_budget_signal(form_submissions):
-    """Look for budget/size indicators in form fields."""
-    budget_keywords = ["budget", "spend", "size", "seats", "users", "employees", "revenue"]
+TEAM_SIZE_ENUM = {
+    "JUST_ME": 1,
+    "TWO_TO_FIVE": 3,
+    "SIX_TO_TWENTY": 13,
+    "TWENTY_ONE_TO_FIFTY": 35,
+    "FIFTY_ONE_PLUS": 75,
+}
 
-    for submission in form_submissions:
-        fields = submission.get("fields", {})
-        for key, value in fields.items():
-            if any(kw in key.lower() for kw in budget_keywords):
-                # Try to parse a numeric value
-                num = _parse_number(value)
-                if num and num > 0:
-                    if num > 100000:
-                        return 25
-                    elif num > 10000:
-                        return 15
-                    elif num > 1000:
-                        return 10
-                    else:
-                        return 5
-    return 0
+
+def _score_team_size(props, config, person_lookup):
+    """Score based on team_size from Lead object.
+    Handles both HubSpot enum strings (JUST_ME, TWO_TO_FIVE, etc.) and numeric values.
+    For large teams (500+), gates on person notability."""
+    raw = props.get("team_size")
+    if not raw:
+        return 0
+
+    # Try enum mapping first, then numeric parse
+    team_size = TEAM_SIZE_ENUM.get(str(raw).strip().upper()) or _parse_number(raw)
+    if not team_size:
+        return 0
+
+    threshold = config.get("large_team_threshold", 500)
+
+    if team_size >= threshold:
+        if _person_is_notable(person_lookup):
+            score_val = config.get("large_team_notable_score", 90)
+            print(f"[opportunity_size] large team ({int(team_size)}) + notable person → {score_val}", file=sys.stderr)
+        else:
+            score_val = config.get("large_team_default_score", 60)
+            print(f"[opportunity_size] large team ({int(team_size)}) + non-notable person → {score_val}", file=sys.stderr)
+        return score_val
+
+    for tier in config.get("team_size_tiers", []):
+        if team_size <= tier["max"]:
+            return tier["score"]
+
+    return 90
+
+
+def _person_is_notable(person_lookup):
+    """Check if the person is in a leadership/decision-making role."""
+    if not person_lookup:
+        return False
+    if person_lookup.get("is_decision_maker"):
+        return True
+    seniority = person_lookup.get("seniority", "unknown")
+    if seniority in ("founder", "c_suite", "clinical_leader", "vp", "director"):
+        return True
+    return False
 
 
 def _score_employees(company, contact_props, config):

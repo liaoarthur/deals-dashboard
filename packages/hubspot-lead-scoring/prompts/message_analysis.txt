@@ -1,40 +1,23 @@
-You are a B2B lead scoring analyst. Analyze the following inbound message from a potential customer and extract structured signals.
+You are a B2B lead scoring analyst for a healthcare SaaS company. Read the following inbound message and give a single holistic buying-intent score.
 
 Message:
 """
 {{MESSAGE}}
 """
 
-Evaluate the message on these dimensions and return a JSON object:
+Score the message 0-100 based on overall buying intent — how likely is this person to become a real sales opportunity versus a routine demo request?
 
-1. "intent_clarity" (0-100): How clear is the prospect's intent? Are they exploring, evaluating, or ready to buy?
-   - 0-30: Vague, generic inquiry, no specific ask
-   - 30-60: Some specificity, mentions a use case or problem
-   - 60-80: Clear need, asks about specific features or pricing
-   - 80-100: Urgent, mentions timeline, budget, or decision process
+Calibration guide:
+- 0-20: Spam, irrelevant, or no real interest
+- 20-40: Generic inquiry with no specifics ("I'd like a demo", "Tell me more about your product", "Can you send me info?"). This is the baseline for a standard demo request.
+- 40-60: Shows some real interest beyond a generic ask — mentions a specific problem, use case, workflow pain point, or team context
+- 60-80: Clear buying signals — asks about pricing, mentions a timeline, references a decision process, describes specific requirements, or indicates they are actively evaluating solutions
+- 80-100: Strong procurement intent — mentions budget, RFP, committee review, implementation timeline, or is clearly in an active buying process
 
-2. "urgency" (0-100): How time-sensitive does this feel?
-   - 0-30: No time pressure, casual inquiry
-   - 30-60: Implies near-term interest
-   - 60-80: Mentions timeline or deadline
-   - 80-100: Immediate need, references active buying process
+Important: Most messages will be short and lack detail. That's fine — a short generic "request a demo" is a 25-35. Don't inflate scores just because someone filled out a form. The score should reflect genuine buying signals present in the text, not assumed intent.
 
-3. "budget_signals" (0-100): Are there any indicators of budget or willingness to pay?
-   - 0-30: No financial indicators
-   - 30-60: Mentions team size or scale indirectly
-   - 60-80: Asks about pricing, mentions budget range
-   - 80-100: States specific budget or procurement process
+Return ONLY a JSON object with these fields:
+- "intent_score" (integer 0-100): The holistic buying-intent score
+- "signal_summary" (string, 1 sentence): Brief explanation of what signals you detected (or "Generic inquiry, no specific buying signals" if none)
 
-4. "product_fit" (0-100): How well does the inquiry match a B2B SaaS product?
-   - 0-30: Off-topic, personal use, or irrelevant
-   - 30-60: Could be relevant but unclear
-   - 60-80: Mentions relevant use case or pain point
-   - 80-100: Perfect fit, describes exact problem the product solves
-
-5. "specificity" (0-100): How specific and detailed is the message?
-   - 0-30: One-liner, no details
-   - 30-60: Some context but generic
-   - 60-80: Specific use case, mentions company context
-   - 80-100: Detailed requirements, technical specifics
-
-Return ONLY a JSON object with these five fields and their integer scores. No explanation, no markdown, just the JSON object.
+No explanation, no markdown, just the JSON object.

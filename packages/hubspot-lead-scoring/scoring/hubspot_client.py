@@ -25,6 +25,12 @@ def _headers():
 LEAD_PROPERTIES = [
     "hs_lead_name", "hs_lead_type", "hs_lead_label", "hs_lead_status",
     "hs_pipeline", "hs_pipeline_stage",
+    # Scoring-relevant Lead properties
+    "team_size",
+    "user_role",
+    "message__form_submission_",
+    "hs_associated_company_name",
+    "hs_primary_associated_object_name",
 ]
 
 
@@ -44,6 +50,54 @@ def get_associated_contact_from_lead(lead_id):
     resp = requests.get(url, headers=_headers())
     if resp.status_code != 200:
         print(f"[hubspot] Could not fetch contact association for lead {lead_id}: {resp.status_code}", file=sys.stderr)
+        return None
+
+    results = resp.json().get("results", [])
+    if not results:
+        return None
+
+    return results[0].get("toObjectId") or results[0].get("id")
+
+
+def write_lead_score(lead_id, tier_display, rationale):
+    """
+    Write scoring results back to the HubSpot Lead record.
+
+    Updates two custom properties:
+    - gtme_lead_score: single-line text, e.g. "A-Priority [87]"
+    - gtme_lead_score_details: multi-line text, the rationale narrative
+    """
+    url = f"{BASE_URL}/crm/v3/objects/leads/{lead_id}"
+    payload = {
+        "properties": {
+            "gtme_lead_score": tier_display,
+            "gtme_lead_score_details": rationale,
+        }
+    }
+
+    try:
+        resp = requests.patch(url, headers=_headers(), json=payload)
+        resp.raise_for_status()
+        print(f"[hubspot] Wrote score to lead {lead_id}: {tier_display}", file=sys.stderr)
+        return True
+    except requests.exceptions.HTTPError as e:
+        print(
+            f"[hubspot] Failed to write score to lead {lead_id}: "
+            f"{e.response.status_code} {e.response.text}",
+            file=sys.stderr,
+        )
+        return False
+    except Exception as e:
+        print(f"[hubspot] Failed to write score to lead {lead_id}: {e}", file=sys.stderr)
+        return False
+
+
+def get_associated_lead_from_contact(contact_id):
+    """Resolve the lead associated with a contact. Returns lead_id or None."""
+    url = f"{BASE_URL}/crm/v3/objects/contacts/{contact_id}/associations/leads"
+    resp = requests.get(url, headers=_headers())
+    if resp.status_code != 200:
+        print(f"[hubspot] Could not fetch lead association for contact {contact_id}: {resp.status_code}", file=sys.stderr)
         return None
 
     results = resp.json().get("results", [])
@@ -78,6 +132,7 @@ CONTACT_PROPERTIES = [
     "numemployees", "annualrevenue",
     "recent_conversion_event_name", "hs_latest_source",
     "message", "hs_content_membership_notes",
+    "contact_specialty__f_2_",
 ]
 
 

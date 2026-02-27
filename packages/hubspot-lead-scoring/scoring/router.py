@@ -59,8 +59,9 @@ def get_modules_for_lead_type(lead_type, context):
     """
     Return list of scoring module names to run for this lead type.
     Message analysis only runs if there's a form submission with a free-text message.
+    specialty_company always runs.
     """
-    modules = ["opportunity_size", "person_role"]
+    modules = ["opportunity_size", "person_role", "specialty_company"]
 
     if lead_type == "inbound":
         has_message = _has_analyzable_message(context)
@@ -73,6 +74,11 @@ def get_modules_for_lead_type(lead_type, context):
 def _has_analyzable_message(context):
     """Check if the lead/contact has a free-text message worth analyzing."""
     props = context.get("properties", {})
+
+    # Check Lead's form submission message property (highest priority)
+    lead_message = (props.get("message__form_submission_") or "").strip()
+    if lead_message and len(lead_message) > 10:
+        return True
 
     # Check direct message property
     message = props.get("message") or props.get("hs_content_membership_notes") or ""
@@ -93,6 +99,11 @@ def _has_analyzable_message(context):
 def extract_message_text(context):
     """Extract the best available message text for analysis."""
     props = context.get("properties", {})
+
+    # Lead's form submission message (highest priority)
+    lead_message = (props.get("message__form_submission_") or "").strip()
+    if lead_message and len(lead_message) > 10:
+        return lead_message
 
     # Direct message property
     message = props.get("message") or props.get("hs_content_membership_notes") or ""

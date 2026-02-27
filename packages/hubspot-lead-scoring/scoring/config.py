@@ -34,5 +34,27 @@ def get_person_role_config():
     return get_config().get('person_role', {})
 
 
+def get_tier_config():
+    """Return tier classification thresholds, sorted descending by min_score."""
+    tiers = get_config().get('tiers', [
+        {"label": "A-Priority", "min_score": 80},
+        {"label": "B-Monitor", "min_score": 50},
+        {"label": "C-Routine", "min_score": 0},
+    ])
+    return sorted(tiers, key=lambda t: t['min_score'], reverse=True)
+
+
+def get_specialty_company_config():
+    return get_config().get('specialty_company', {})
+
+
+def get_weight_adjustments():
+    return get_config().get('weight_adjustments', {})
+
+
+def get_score_floors():
+    return get_config().get('score_floors', {})
+
+
 def get_dedup_window():
     return get_config().get('dedup', {}).get('window_seconds', 60)

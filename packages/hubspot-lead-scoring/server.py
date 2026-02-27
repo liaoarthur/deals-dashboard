@@ -1,4 +1,4 @@
-"""Webhook server — receives HubSpot webhook events and triggers scoring."""
+"""Webhook server — receives HubSpot workflow webhooks and triggers scoring."""
 
 import os
 import sys
@@ -23,9 +23,11 @@ WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET", "")
 @app.route("/webhook", methods=["POST"])
 def handle_webhook():
     """
-    Receive HubSpot webhook events.
-    Expects an array of event objects from HubSpot.
-    Supported: lead.creation, lead.propertyChange
+    Receive a webhook from a HubSpot workflow.
+
+    Expected payload: {"hs_lead_object_id": "...", "hs_contact_object_id": "..."}
+    - hs_lead_object_id is required
+    - hs_contact_object_id is informational only — pipeline resolves contact via association API
     """
     # Optional signature verification
     if WEBHOOK_SECRET:
@@ -35,35 +37,25 @@ def handle_webhook():
         if not hmac.compare_digest(signature, expected):
             return jsonify({"error": "Invalid signature"}), 401
 
-    events = request.get_json(force=True, silent=True)
-    if not events:
-        return jsonify({"error": "No events in payload"}), 400
+    data = request.get_json(force=True, silent=True)
+    if not data:
+        return jsonify({"error": "No JSON payload"}), 400
 
-    # HubSpot sends an array of events
-    if not isinstance(events, list):
-        events = [events]
+    # Accept hs_lead_object_id (HubSpot workflow), or lead_id/objectId as fallbacks
+    lead_id = str(
+        data.get("hs_lead_object_id")
+        or data.get("lead_id")
+        or data.get("objectId")
+        or ""
+    ).strip()
+    if not lead_id:
+        return jsonify({"error": "hs_lead_object_id is required"}), 400
 
-    # Filter for lead events we care about
-    lead_ids = set()
-    for event in events:
-        sub_type = event.get("subscriptionType", "")
-        if sub_type in ("lead.creation", "lead.propertyChange"):
-            lid = event.get("objectId")
-            if lid:
-                lead_ids.add(str(lid))
+    # Score in background so the webhook returns fast
+    thread = threading.Thread(target=_score_in_background, args=(lead_id,), daemon=True)
+    thread.start()
 
-    if not lead_ids:
-        return jsonify({"status": "ok", "message": "No scoreable events"}), 200
-
-    # Score each lead in a background thread (don't block the webhook response)
-    for lid in lead_ids:
-        thread = threading.Thread(target=_score_in_background, args=(lid,), daemon=True)
-        thread.start()
-
-    return jsonify({
-        "status": "ok",
-        "leads_queued": list(lead_ids),
-    }), 200
+    return jsonify({"status": "ok", "lead_id": lead_id}), 200
 
 
 def _score_in_background(lead_id):
@@ -71,7 +63,7 @@ def _score_in_background(lead_id):
     try:
         result = score_lead(lead_id)
         if result:
-            print(f"[server] Scored lead {lead_id}: {result['score']}/100", file=sys.stderr)
+            print(f"[server] {result.get('tier_display', result['score'])} — lead {lead_id}", file=sys.stderr)
     except Exception as e:
         print(f"[server] Error scoring lead {lead_id}: {e}", file=sys.stderr)
 
@@ -103,6 +95,7 @@ def health():
 # ─── Entry point ──────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    port = int(os.getenv("WEBHOOK_PORT", 3000))
+    # Railway sets PORT; WEBHOOK_PORT is for local dev; fallback to 3000
+    port = int(os.getenv("PORT", os.getenv("WEBHOOK_PORT", 3000)))
     print(f"Lead scoring webhook server starting on port {port}...", file=sys.stderr)
-    app.run(host="0.0.0.0", port=port, debug=True)
+    app.run(host="0.0.0.0", port=port)

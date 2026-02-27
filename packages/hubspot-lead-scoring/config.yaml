@@ -3,27 +3,47 @@
 
 # Weight configuration per lead type.
 # Each set of weights must sum to 1.0.
+# The pipeline normalizes weights if a module doesn't run/returns None.
 weights:
   inbound:
-    opportunity_size: 0.3
-    message_analysis: 0.4
-    person_role: 0.3
+    opportunity_size: 0.20
+    message_analysis: 0.25
+    person_role: 0.35
+    specialty_company: 0.20
   product:
-    opportunity_size: 0.5
-    person_role: 0.5
+    opportunity_size: 0.25
+    person_role: 0.45
+    specialty_company: 0.30
   event:
-    opportunity_size: 0.5
-    person_role: 0.5
+    opportunity_size: 0.25
+    person_role: 0.45
+    specialty_company: 0.30
   other:
-    opportunity_size: 0.5
-    person_role: 0.5
+    opportunity_size: 0.25
+    person_role: 0.45
+    specialty_company: 0.30
 
 # ─── Opportunity Size Scoring ─────────────────────────────────────────────────
 opportunity_size:
-  # If a form submission exists, start with this base score
-  form_submission_base_score: 70
+  # Team size from Lead object — most relevant sizing signal.
+  # HubSpot enum: JUST_ME(1), TWO_TO_FIVE(3), SIX_TO_TWENTY(13),
+  #               TWENTY_ONE_TO_FIFTY(35), FIFTY_ONE_PLUS(75).
+  # 21+ is the sweet spot for healthcare orgs. 500+ is handled separately
+  # (enterprise flag — person-gated).
+  team_size_tiers:
+    - { max: 1,     score: 15 }    # JUST_ME
+    - { max: 5,     score: 30 }    # TWO_TO_FIVE
+    - { max: 20,    score: 50 }    # SIX_TO_TWENTY
+    - { max: 50,    score: 70 }    # TWENTY_ONE_TO_FIFTY  (sweet spot starts)
+    - { max: 150,   score: 80 }
+    - { max: 500,   score: 90 }
 
-  # Employee count → score mapping (upper bound → score)
+  # 500+ team: cap score here unless person is notable (leadership/decision-maker)
+  large_team_threshold: 500
+  large_team_notable_score: 90
+  large_team_default_score: 60
+
+  # Company employee count → score mapping (fallback when team_size unavailable)
   employee_tiers:
     - { max: 10,    score: 20 }
     - { max: 50,    score: 35 }
@@ -43,26 +63,173 @@ opportunity_size:
 # ─── Person / Role Scoring ────────────────────────────────────────────────────
 person_role:
   seniority_scores:
-    founder:    95
-    c_suite:    95
-    vp:         80
-    director:   70
-    manager:    55
-    senior:     45
-    individual: 30
-    unknown:    25
+    founder:         95
+    clinical_leader: 90
+    c_suite:         95
+    vp:              80
+    director:        70
+    manager:         55
+    senior:          45
+    individual:      30
+    unknown:         25
 
-  # Keywords that map to seniority levels (case-insensitive)
+  # Keywords that map to seniority levels (case-insensitive, word-boundary matched).
+  # Checked in priority order defined in classify_title():
+  #   founder → clinical_leader → c_suite → vp → director → manager → senior → individual
   title_keywords:
     founder:    ["founder", "co-founder", "cofounder", "owner"]
-    c_suite:    ["ceo", "cto", "cfo", "coo", "cmo", "cro", "chief"]
+    clinical_leader:
+      - "chief medical officer"
+      - "chief physician"
+      - "chief of surgery"
+      - "chief of staff"
+      - "chief nursing officer"
+      - "chief clinical officer"
+      - "medical director"
+      - "senior physician"
+      - "attending physician"
+      - "department head"
+      - "cmio"
+    c_suite:    ["ceo", "cto", "cfo", "coo", "cro", "chief executive", "chief technology", "chief financial", "chief operating", "chief revenue"]
     vp:         ["vp", "vice president"]
     director:   ["director", "head of"]
     manager:    ["manager", "lead", "team lead"]
     senior:     ["senior", "sr.", "principal", "staff"]
     individual: ["analyst", "associate", "coordinator", "specialist", "engineer", "developer"]
 
+  # Web search importance boosts (applied on top of base seniority score)
+  decision_maker_boost: 10
+  notable_person_boost: 5
+  clinical_leadership_boost: 5
+
+# ─── Specialty & Company Scoring ──────────────────────────────────────────────
+specialty_company:
+  # Internal weighting: specialty is primary signal, company is secondary
+  specialty_weight: 0.6
+  company_weight: 0.4
+
+  unknown_specialty_score: 20
+  unknown_company_score: 15
+
+  # High-priority medical specialties (score: 90)
+  high_priority_score: 90
+  high_priority_specialties:
+    - "cardiology"
+    - "orthopedic"
+    - "oncology"
+    - "neurology"
+    - "neurosurgery"
+    - "gastroenterology"
+    - "urology"
+    - "pulmonology"
+    - "endocrinology"
+    - "rheumatology"
+    - "nephrology"
+    - "hematology"
+    - "internal medicine"
+    - "general surgery"
+    - "vascular surgery"
+    - "plastic surgery"
+    - "dermatology"
+    - "ophthalmology"
+    - "otolaryngology"
+    - "ent"
+    - "radiology"
+    - "anesthesiology"
+    - "emergency medicine"
+    - "critical care"
+    - "interventional"
+
+  # Medium-priority specialties (score: 65)
+  medium_priority_score: 65
+  medium_priority_specialties:
+    - "family medicine"
+    - "family practice"
+    - "pediatric"
+    - "obstetrics"
+    - "gynecology"
+    - "ob/gyn"
+    - "psychiatry"
+    - "pathology"
+    - "geriatric"
+    - "hospice"
+    - "palliative"
+    - "sports medicine"
+    - "pain management"
+    - "allergy"
+    - "immunology"
+    - "infectious disease"
+
+  # Low-priority specialties — allied health, etc. (score: 35)
+  low_priority_score: 35
+  low_priority_specialties:
+    - "physical therapy"
+    - "occupational therapy"
+    - "chiropractic"
+    - "chiropractor"
+    - "acupuncture"
+    - "massage therapy"
+    - "speech therapy"
+    - "audiology"
+    - "optometry"
+    - "podiatry"
+    - "dental"
+    - "dentist"
+    - "nutrition"
+    - "dietitian"
+    - "counseling"
+    - "social work"
+
+  # Specialty present but not in any list above
+  other_specialty_score: 50
+
+  # Company/org scoring via Claude web search
+  org_type_scores:
+    hospital_system: 90
+    academic_medical: 90
+    mso_aco_gpo: 85            # management services orgs, ACOs, group purchasing orgs
+    physician_group: 70        # includes specialty clinics
+    clinic: 60
+    allied_health: 35
+    healthtech_vendor: 10      # EMR/EHR companies, healthtech SaaS, integration partners
+    non_healthcare: 5          # orgs with no healthcare relevance
+    unknown: 40
+  notable_boost: 10
+  large_org_non_notable_cap: 50   # cap for big orgs when person isn't notable
+  fallback_company_score: 40
+
+# ─── Contextual Weight Adjustments ──────────────────────────────────────────
+# Dynamic adjustments applied to base weights before normalization.
+weight_adjustments:
+  # Non-notable physician at a large health system → reduce opportunity_size weight
+  # (org size inflates opportunity score but a rank-and-file physician can't drive a deal)
+  non_notable_physician_opp_size_reduction: 0.10
+
+  # High-intent message (proposal, pricing, procurement) → boost message_analysis weight
+  high_intent_message_boost: 0.10
+  high_intent_message_threshold: 70
+
+  # Low-intent message (generic "tell me more") → reduce message_analysis weight
+  low_intent_message_reduction: 0.10
+  low_intent_message_threshold: 40
+
+# ─── Score Floor Guarantees ──────────────────────────────────────────────────
+# If a key signal (person_role or message_analysis) is strong enough,
+# the composite score is floored to at least B-Monitor regardless of
+# how other modules scored.
+score_floors:
+  person_role_threshold: 70       # person_role >= 70 → composite >= floor
+  message_analysis_threshold: 70  # message_analysis >= 70 → composite >= floor
+  floor_score: 50                 # B-Monitor minimum
+
+# ─── Tier Classification ─────────────────────────────────────────────────────
+# Score thresholds for tier labels. Checked in descending min_score order.
+tiers:
+  - { label: "A-Priority", min_score: 80 }
+  - { label: "B-Monitor",  min_score: 50 }
+  - { label: "C-Routine",  min_score: 0  }
+
 # ─── Deduplication ────────────────────────────────────────────────────────────
 dedup:
-  # Ignore duplicate webhook events for the same contact within this window (seconds)
+  # Ignore duplicate webhook events for the same lead within this window (seconds)
   window_seconds: 60
