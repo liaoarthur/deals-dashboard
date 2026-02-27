@@ -5,6 +5,8 @@ Flow: Lead (primary) → associated Contact (enrichment + forms) → associated 
 
 import os
 import sys
+from datetime import datetime, timedelta, timezone
+
 import requests
 
 HUBSPOT_TOKEN = os.getenv("HUBSPOT_ACCESS_TOKEN")
@@ -204,6 +206,54 @@ def get_associated_company_from_contact(contact_id):
         return None
 
     return get_company(company_id)
+
+
+# ─── Lead search (backlog) ───────────────────────────────────────────────────
+
+def search_unscored_leads(batch_size=10):
+    """
+    Search for the oldest unscored inbound US leads from the past 3 months.
+
+    Filters (AND):
+      - lead_trigger = "Inbound Marketing Qualified Lead" (HubSpot label: "Inbound Lead")
+      - country = "United States"
+      - hs_createdate >= 3 months ago
+      - gtme_lead_score has no value (not yet scored)
+
+    Returns (lead_ids, total_matching) sorted oldest-first, up to batch_size.
+    """
+    three_months_ago = (
+        datetime.now(timezone.utc) - timedelta(days=90)
+    ).strftime("%Y-%m-%dT00:00:00.000Z")
+
+    url = f"{BASE_URL}/crm/v3/objects/leads/search"
+    body = {
+        "filterGroups": [{
+            "filters": [
+                {"propertyName": "lead_trigger", "operator": "EQ",
+                 "value": "Inbound Marketing Qualified Lead"},
+                {"propertyName": "country", "operator": "EQ",
+                 "value": "United States"},
+                {"propertyName": "hs_createdate", "operator": "GTE",
+                 "value": three_months_ago},
+                {"propertyName": "gtme_lead_score", "operator": "NOT_HAS_PROPERTY"},
+            ]
+        }],
+        "sorts": [{"propertyName": "hs_createdate", "direction": "ASCENDING"}],
+        "properties": ["hs_lead_name", "hs_createdate"],
+        "limit": min(batch_size, 100),
+    }
+
+    resp = requests.post(url, headers=_headers(), json=body)
+    resp.raise_for_status()
+    data = resp.json()
+
+    results = data.get("results", [])
+    lead_ids = [r["id"] for r in results]
+    total = data.get("total", len(lead_ids))
+
+    print(f"[hubspot] Search found {total} unscored leads, returning batch of {len(lead_ids)}", file=sys.stderr)
+    return lead_ids, total
 
 
 # ─── Full context bundle ─────────────────────────────────────────────────────
