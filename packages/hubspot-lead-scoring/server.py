@@ -27,9 +27,10 @@ def handle_webhook():
     """
     Receive a webhook from a HubSpot workflow.
 
-    Expected payload: {"hs_lead_object_id": "...", "hs_contact_object_id": "..."}
+    Expected payload: {"hs_lead_object_id": "...", "hs_contact_object_id": "...", "hs_company_object_id": "..."}
     - hs_lead_object_id is required
     - hs_contact_object_id is informational only — pipeline resolves contact via association API
+    - hs_company_object_id is optional — passed through to pipeline for company data lookup
     """
     # Optional signature verification
     if WEBHOOK_SECRET:
@@ -53,17 +54,20 @@ def handle_webhook():
     if not lead_id:
         return jsonify({"error": "hs_lead_object_id is required"}), 400
 
+    # Optional company ID (used for company product usage scoring)
+    company_id = str(data.get("hs_company_object_id") or "").strip() or None
+
     # Score in background so the webhook returns fast
-    thread = threading.Thread(target=_score_in_background, args=(lead_id,), daemon=True)
+    thread = threading.Thread(target=_score_in_background, args=(lead_id, company_id), daemon=True)
     thread.start()
 
-    return jsonify({"status": "ok", "lead_id": lead_id}), 200
+    return jsonify({"status": "ok", "lead_id": lead_id, "company_id": company_id}), 200
 
 
-def _score_in_background(lead_id):
+def _score_in_background(lead_id, company_id=None):
     """Run scoring in a background thread so the webhook returns fast."""
     try:
-        result = score_lead(lead_id)
+        result = score_lead(lead_id, company_id=company_id)
         if result:
             print(f"[server] {result.get('tier_display', result['score'])} — lead {lead_id}", file=sys.stderr)
     except Exception as e:

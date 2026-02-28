@@ -14,6 +14,10 @@ Calibration guide:
 - 60-80: Clear buying signals — asks about pricing, mentions a timeline, references a decision process, describes specific requirements, or indicates they are actively evaluating solutions
 - 80-100: Strong procurement intent — mentions budget, RFP, committee review, implementation timeline, or is clearly in an active buying process
 
+Additional calibration notes:
+- Direct questions about specific features, integrations, or pricing indicate higher intent — bump up +5-10 from baseline (e.g., "Do you integrate with Epic?" is 45-55, not 25-35)
+- Single words or very short non-descriptive messages (under ~15 characters, e.g., "hi", "demo", "info") indicate minimal effort and low intent — score 15-25
+
 Important: Most messages will be short and lack detail. That's fine — a short generic "request a demo" is a 25-35. Don't inflate scores just because someone filled out a form. The score should reflect genuine buying signals present in the text, not assumed intent.
 
 Return ONLY a JSON object with these fields:

@@ -12,6 +12,7 @@ from .score_opportunity_size import score as score_opportunity_size
 from .score_message import score as score_message
 from .score_person_role import score as score_person_role
 from .score_specialty_company import score as score_specialty_company
+from .inbound import score_inbound
 from .database import upsert_score
 from .tier import classify_tier, format_tier_display, build_rationale
 
@@ -42,11 +43,13 @@ def _clear_dedup(lead_id):
 
 # ─── Pipeline ─────────────────────────────────────────────────────────────────
 
-def score_lead(lead_id):
+def score_lead(lead_id, company_id=None):
     """
     Full scoring pipeline for a single lead.
     Fetches Lead → Contact → Company, then runs scoring modules.
     Returns the scored record dict, or None if dedup-skipped.
+
+    company_id: optional HubSpot company ID (from webhook payload).
     """
     lead_id = str(lead_id)
 
@@ -56,22 +59,26 @@ def score_lead(lead_id):
         return None
 
     try:
-        return _run_pipeline(lead_id)
+        return _run_pipeline(lead_id, company_id=company_id)
     finally:
         _clear_dedup(lead_id)
 
 
-def _run_pipeline(lead_id):
+def _run_pipeline(lead_id, company_id=None):
     """Core pipeline logic, separated from dedup for testability."""
     # 1. Fetch full context: Lead → Contact → Company
     print(f"[pipeline] Fetching context for lead {lead_id}...", file=sys.stderr)
-    context = fetch_lead_context(lead_id)
+    context = fetch_lead_context(lead_id, company_id=company_id)
 
     # 2. Classify lead type
     lead_type = classify_lead_type(context)
     print(f"[pipeline] Lead type: {lead_type}", file=sys.stderr)
 
-    # 3. Determine which modules to run
+    # 2b. Inbound leads use the new 5-criteria scoring system
+    if lead_type == "inbound":
+        return _run_inbound_pipeline(lead_id, lead_type, context)
+
+    # 3. Determine which modules to run (non-inbound path)
     modules_to_run = get_modules_for_lead_type(lead_type, context)
     print(f"[pipeline] Modules: {modules_to_run}", file=sys.stderr)
 
@@ -139,6 +146,63 @@ def _run_pipeline(lead_id):
         print(f"[pipeline] HubSpot writeback failed for lead {lead_id}: {e}", file=sys.stderr)
 
     print(f"[pipeline] {tier_display} — lead {lead_id} ({lead_type})", file=sys.stderr)
+    return record
+
+
+def _run_inbound_pipeline(lead_id, lead_type, context):
+    """
+    Inbound-specific scoring pipeline using the 5-criteria system.
+    Called instead of the generic module pipeline for inbound leads.
+    """
+    print(f"[pipeline] Running inbound 5-criteria scoring for lead {lead_id}", file=sys.stderr)
+
+    # Run inbound scoring
+    inbound_result = score_inbound(context)
+
+    composite_score = inbound_result["score"]
+    sub_scores = inbound_result["sub_scores"]
+    weights_used = inbound_result["weights_used"]
+    modules_run = inbound_result["modules_run"]
+
+    # Classify tier
+    tier_label = classify_tier(composite_score)
+    tier_display = format_tier_display(tier_label, composite_score)
+
+    # Build the scored record (same structure as generic pipeline)
+    record = {
+        "hubspot_record_id": lead_id,
+        "lead_type": lead_type,
+        "score": composite_score,
+        "tier": tier_label,
+        "tier_display": tier_display,
+        "sub_scores": sub_scores,
+        "modules_run": modules_run,
+        "weights_used": weights_used,
+        "scored_at": datetime.now(timezone.utc).isoformat(),
+        "raw_inputs": {
+            "lead_properties": context.get("lead_properties", {}),
+            "contact_id": context.get("contact_id"),
+            "merged_properties": context.get("properties", {}),
+            "form_count": len(context.get("form_submissions", [])),
+            "has_company": bool(context.get("company")),
+            "person_lookup": context.get("_enrichment", {}).get("person_lookup"),
+            "errors": [],
+        },
+    }
+
+    # Generate rationale
+    record["rationale"] = build_rationale(record)
+
+    # Store locally
+    upsert_score(record)
+
+    # Write score back to HubSpot Lead record
+    try:
+        write_lead_score(lead_id, tier_display, record["rationale"])
+    except Exception as e:
+        print(f"[pipeline] HubSpot writeback failed for lead {lead_id}: {e}", file=sys.stderr)
+
+    print(f"[pipeline] {tier_display} — lead {lead_id} ({lead_type}, inbound)", file=sys.stderr)
     return record
 
 

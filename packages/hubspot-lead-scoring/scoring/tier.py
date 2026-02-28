@@ -1,6 +1,6 @@
 """Tier classification and rationale generation for scored leads."""
 
-from .config import get_tier_config, get_person_role_config
+from .config import get_tier_config, get_person_role_config, get_inbound_scoring_config
 from .score_person_role import classify_title
 
 
@@ -36,7 +36,23 @@ def build_rationale(record):
     """
     Build a concise, holistic rationale explaining why a lead received its tier.
     Synthesizes all signals into a readable narrative.
+
+    Dispatches to inbound-specific rationale when lead_type == "inbound"
+    and the new 5-criteria system was used (detected by "size" in sub_scores).
     """
+    sub = record.get('sub_scores', {})
+    lead_type = record.get('lead_type', 'other')
+
+    # Inbound leads scored with the new 5-criteria system
+    if lead_type == "inbound" and "size" in sub:
+        return _build_inbound_rationale(record)
+
+    # Original rationale for non-inbound leads
+    return _build_generic_rationale(record)
+
+
+def _build_generic_rationale(record):
+    """Original rationale builder for non-inbound leads (product, event, other)."""
     raw = record.get('raw_inputs', {})
     props = raw.get('merged_properties', {})
     sub = record.get('sub_scores', {})
@@ -62,6 +78,45 @@ def build_rationale(record):
         qualifiers.append(opportunity)
     if org_fit:
         qualifiers.append(org_fit)
+
+    if qualifiers:
+        sentence += ", " + ", and ".join(qualifiers) if len(qualifiers) > 1 else ", " + qualifiers[0]
+
+    # Wrap with tier-level summary
+    if tier == "A-Priority":
+        return f"High-priority lead: {sentence}."
+    elif tier == "B-Monitor":
+        return f"Worth monitoring: {sentence}."
+    else:
+        return f"Routine lead: {sentence}."
+
+
+def _build_inbound_rationale(record):
+    """
+    Build rationale for inbound leads scored with the 5-criteria system.
+    Covers: size, role, message, contact usage, company usage.
+    """
+    raw = record.get('raw_inputs', {})
+    props = raw.get('merged_properties', {})
+    sub = record.get('sub_scores', {})
+    tier = record.get('tier', '')
+
+    person_lookup = raw.get('person_lookup')
+
+    # ─── Gather fragments ─────────────────────────────────────────────────
+    who = _who_fragment(props, person_lookup)
+    engagement = _engagement_fragment(raw, props, sub, "inbound")
+    size_frag = _inbound_size_fragment(sub, props)
+    usage_frag = _inbound_usage_fragment(sub, props)
+
+    # ─── Build sentence ───────────────────────────────────────────────────
+    sentence = f"{who} who {engagement}"
+
+    qualifiers = []
+    if size_frag:
+        qualifiers.append(size_frag)
+    if usage_frag:
+        qualifiers.append(usage_frag)
 
     if qualifiers:
         sentence += ", " + ", and ".join(qualifiers) if len(qualifiers) > 1 else ", " + qualifiers[0]
@@ -207,3 +262,77 @@ def _org_fit_fragment(sub, props):
         return f"at a {org_part}"
 
     return None
+
+
+# ─── Inbound-specific fragments ──────────────────────────────────────────────
+
+_SIZE_LABELS = {
+    "JUST_ME": "solo practitioner",
+    "TWO_TO_FIVE": "small group (2-5)",
+    "SIX_TO_TWENTY": "mid-size group (6-20)",
+    "TWENTY_ONE_TO_FIFTY": "mid-size group (21-50)",
+    "FIFTY_ONE_PLUS": "large group (51+)",
+    "FIVEHUNDREDPLUS": "enterprise (500+)",
+    "UNKNOWN": "unknown size",
+}
+
+
+def _inbound_size_fragment(sub, props):
+    """Describe org size for inbound rationale."""
+    size_score = sub.get('size')
+    if size_score is None:
+        return None
+
+    # Try to get the enum value for a descriptive label
+    org_size = (
+        (props.get('organization_size') or '').strip().upper()
+        or (props.get('company_employee_size_range__c_') or '').strip().upper()
+    )
+    size_label = _SIZE_LABELS.get(org_size, "")
+
+    config = get_inbound_scoring_config()
+    sweet_spots = {"SIX_TO_TWENTY", "TWENTY_ONE_TO_FIFTY"}
+
+    if org_size in sweet_spots:
+        if size_label:
+            return f"from a {size_label} in our sweet spot"
+        return "from an ideally-sized organization"
+    elif size_score >= 60:
+        if size_label:
+            return f"from a {size_label}"
+        return "from a sizable organization"
+    elif size_score >= 30:
+        if size_label:
+            return f"from a {size_label}"
+        return "from a smaller organization"
+    else:
+        if size_label:
+            return f"from a {size_label}"
+        return "with limited size data"
+
+
+def _inbound_usage_fragment(sub, props):
+    """Describe product usage signals (contact + company) for inbound rationale."""
+    parts = []
+
+    # Contact usage boost
+    contact_boost = sub.get('contact_usage_boost', 0)
+    if contact_boost >= 6:
+        parts.append("active product user")
+    elif contact_boost >= 3:
+        parts.append("some prior product usage")
+
+    # Company usage
+    company_score = sub.get('company_usage')
+    if company_score is not None:
+        if company_score >= 70:
+            parts.append("strong existing product usage at their company")
+        elif company_score >= 40:
+            parts.append("moderate product adoption at their company")
+        elif company_score > 0:
+            parts.append("some product usage at their company")
+
+    if not parts:
+        return None
+
+    return "with " + " and ".join(parts)

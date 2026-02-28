@@ -222,6 +222,93 @@ score_floors:
   message_analysis_threshold: 70  # message_analysis >= 70 → composite >= floor
   floor_score: 50                 # B-Monitor minimum
 
+# ─── Inbound Lead Scoring (new 5-criteria system) ────────────────────────
+# Used exclusively for lead_type == "inbound". Non-inbound leads use the
+# weighted module system above.
+inbound_scoring:
+  # ── Size scoring (Criterion 1) ─────────────────────────────────────────
+  # Maps organization_size enum → 0-100 score.
+  # Sweet spots: SIX_TO_TWENTY and TWENTY_ONE_TO_FIFTY.
+  size_enum_scores:
+    JUST_ME: 15
+    TWO_TO_FIVE: 35
+    SIX_TO_TWENTY: 80
+    TWENTY_ONE_TO_FIFTY: 85
+    FIFTY_ONE_PLUS: 65
+    FIVEHUNDREDPLUS: 50
+    UNKNOWN: 30
+  size_no_data_score: 20
+
+  # ── Weights ────────────────────────────────────────────────────────────
+  # Base Score = weighted_average(size, message, [company_usage])
+  # When company usage data exists:
+  weights_with_company:
+    size: 0.45
+    message: 0.30
+    company_usage: 0.25
+  # When no company usage data:
+  weights_without_company:
+    size: 0.55
+    message: 0.45
+  # When no message either (fallback):
+  weights_size_only:
+    size: 1.0
+
+  # ── Role scoring (Criterion 2) — boost only ───────────────────────────
+  role_boost_leadership: 10
+  role_boost_non_leadership: 0
+  leadership_keywords:
+    - "owner"
+    - "founder"
+    - "co-founder"
+    - "cofounder"
+    - "ceo"
+    - "cto"
+    - "cfo"
+    - "coo"
+    - "president"
+    - "vp"
+    - "vice president"
+    - "director"
+    - "chief"
+    - "medical director"
+    - "department head"
+    - "practice manager"
+    - "administrator"
+    - "partner"
+    - "senior physician"
+    - "attending"
+    - "department chair"
+
+  # ── Contact product usage (Criterion 4) — boost only ───────────────────
+  contact_usage:
+    high_sessions: 5         # ≥ this + recent → max boost
+    mid_sessions: 2          # ≥ this + recent → mid boost
+    recency_days: 30         # "recent" = active within N days
+    boost_high: 8
+    boost_mid: 6
+    boost_low: 3             # any sessions at all
+
+  # ── Company product usage (Criterion 5) — weighted when data exists ────
+  company_usage:
+    # User count scoring (60% of company usage score)
+    user_weight: 0.6
+    user_tiers:
+      - { min: 10, score: 90 }
+      - { min: 5,  score: 75 }
+      - { min: 2,  score: 55 }
+      - { min: 1,  score: 35 }
+    user_default_score: 0
+    # Session count scoring (40% of company usage score)
+    session_weight: 0.4
+    session_tiers:
+      - { min: 100, score: 90 }
+      - { min: 50,  score: 75 }
+      - { min: 20,  score: 60 }
+      - { min: 5,   score: 40 }
+      - { min: 1,   score: 25 }
+    session_default_score: 0
+
 # ─── Tier Classification ─────────────────────────────────────────────────────
 # Score thresholds for tier labels. Checked in descending min_score order.
 tiers:

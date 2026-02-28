@@ -56,5 +56,9 @@ def get_score_floors():
     return get_config().get('score_floors', {})
 
 
+def get_inbound_scoring_config():
+    return get_config().get('inbound_scoring', {})
+
+
 def get_dedup_window():
     return get_config().get('dedup', {}).get('window_seconds', 60)

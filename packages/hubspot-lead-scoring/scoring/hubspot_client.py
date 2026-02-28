@@ -135,6 +135,13 @@ CONTACT_PROPERTIES = [
     "recent_conversion_event_name", "hs_latest_source",
     "message", "hs_content_membership_notes",
     "contact_specialty__f_2_",
+    # Inbound scoring properties
+    "organization_size",
+    "company_employee_size_range__c_",
+    "organisation_type__product_",
+    "lc_job_title",
+    "db_session_count",
+    "db_last_active_date",
 ]
 
 
@@ -176,7 +183,7 @@ def get_form_submissions(contact_id):
 
 # ─── Company ──────────────────────────────────────────────────────────────────
 
-COMPANY_PROPERTIES = "name,domain,numberofemployees,annualrevenue,industry,city,state,country"
+COMPANY_PROPERTIES = "name,domain,numberofemployees,annualrevenue,industry,city,state,country,db_company_session_count,number_of_heidi_users"
 
 
 def get_company(company_id):
@@ -258,10 +265,13 @@ def search_unscored_leads(batch_size=10):
 
 # ─── Full context bundle ─────────────────────────────────────────────────────
 
-def fetch_lead_context(lead_id):
+def fetch_lead_context(lead_id, company_id=None):
     """
     Fetch everything needed for scoring, starting from a Lead object:
     Lead → associated Contact (for enrichment + form submissions) → Company (for size/revenue).
+
+    If company_id is provided (e.g. from webhook), it's used directly instead of
+    association lookup.
 
     Returns a unified context dict with lead as primary.
     """
@@ -283,18 +293,24 @@ def fetch_lead_context(lead_id):
 
         form_submissions = get_form_submissions(contact_id)
 
-    # 3. Resolve Company (try Lead → Company first, fall back to Contact → Company)
+    # 3. Resolve Company
     company_props = {}
-    company_id = get_associated_company_from_lead(lead_id)
-
     if company_id:
+        # Company ID provided directly (e.g. from webhook)
         company = get_company(company_id)
         if company:
             company_props = company.get("properties", {})
-    elif contact_id:
-        company = get_associated_company_from_contact(contact_id)
-        if company:
-            company_props = company.get("properties", {})
+    else:
+        # Association-based resolution: Lead → Company, fallback Contact → Company
+        resolved_company_id = get_associated_company_from_lead(lead_id)
+        if resolved_company_id:
+            company = get_company(resolved_company_id)
+            if company:
+                company_props = company.get("properties", {})
+        elif contact_id:
+            company = get_associated_company_from_contact(contact_id)
+            if company:
+                company_props = company.get("properties", {})
 
     # 4. Merge properties — lead props take precedence, contact fills gaps
     merged_props = {**contact_props, **{k: v for k, v in lead_props.items() if v is not None}}
