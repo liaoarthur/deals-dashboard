@@ -112,7 +112,8 @@ def score_inbound(context):
 def _score_size(props, config):
     """
     Score based on organization_size enum.
-    Fallback: company_employee_size_range__c_.
+    Fallback chain: organization_size → organisation_size__product_ → company_employee_size_range__c_
+    All on the contact object.
     """
     enum_scores = config.get("size_enum_scores", {})
     no_data = config.get("size_no_data_score", 20)
@@ -122,10 +123,15 @@ def _score_size(props, config):
     if raw and raw in enum_scores:
         return enum_scores[raw]
 
-    # Fallback: company_employee_size_range__c_
-    fallback = (props.get("company_employee_size_range__c_") or "").strip().upper()
-    if fallback and fallback in enum_scores:
-        return enum_scores[fallback]
+    # Fallback 1: organisation_size__product_
+    fallback1 = (props.get("organisation_size__product_") or "").strip().upper()
+    if fallback1 and fallback1 in enum_scores:
+        return enum_scores[fallback1]
+
+    # Fallback 2: company_employee_size_range__c_
+    fallback2 = (props.get("company_employee_size_range__c_") or "").strip().upper()
+    if fallback2 and fallback2 in enum_scores:
+        return enum_scores[fallback2]
 
     # No data
     return no_data

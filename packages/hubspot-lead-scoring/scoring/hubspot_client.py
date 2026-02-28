@@ -137,6 +137,7 @@ CONTACT_PROPERTIES = [
     "contact_specialty__f_2_",
     # Inbound scoring properties
     "organization_size",
+    "organisation_size__product_",
     "company_employee_size_range__c_",
     "organisation_type__product_",
     "lc_job_title",
