@@ -818,6 +818,16 @@ h1, h2, h3, h4, h5, h6 {
     color: #e65100;
 }
 
+.contact-badge.apollo {
+    background: #e3f2fd;
+    color: #1565c0;
+}
+
+.contact-badge.clay {
+    background: #fce4ec;
+    color: #c62828;
+}
+
 .fallback-badge {
     color: var(--accent-amber);
     font-size: 0.8125rem;

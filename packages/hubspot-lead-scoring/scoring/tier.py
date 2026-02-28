@@ -9,7 +9,7 @@ def classify_tier(score):
     for tier in get_tier_config():
         if score >= tier['min_score']:
             return tier['label']
-    return "C-Routine"
+    return "D-Baseline"
 
 
 def format_tier_display(tier_label, score):
@@ -85,10 +85,12 @@ def _build_generic_rationale(record):
     # Wrap with tier-level summary
     if tier == "A-Priority":
         return f"High-priority lead: {sentence}."
-    elif tier == "B-Monitor":
-        return f"Worth monitoring: {sentence}."
+    elif tier == "B-Hot":
+        return f"Hot lead: {sentence}."
+    elif tier == "C-Warm":
+        return f"Warm lead: {sentence}."
     else:
-        return f"Routine lead: {sentence}."
+        return f"Baseline lead: {sentence}."
 
 
 def _build_inbound_rationale(record):
@@ -124,10 +126,12 @@ def _build_inbound_rationale(record):
     # Wrap with tier-level summary
     if tier == "A-Priority":
         return f"High-priority lead: {sentence}."
-    elif tier == "B-Monitor":
-        return f"Worth monitoring: {sentence}."
+    elif tier == "B-Hot":
+        return f"Hot lead: {sentence}."
+    elif tier == "C-Warm":
+        return f"Warm lead: {sentence}."
     else:
-        return f"Routine lead: {sentence}."
+        return f"Baseline lead: {sentence}."
 
 
 def _who_fragment(props, person_lookup=None):
@@ -189,13 +193,16 @@ def _engagement_fragment(raw, props, sub, lead_type):
     has_message = bool(message) and len(message) > 10
 
     if form_count > 0 and has_message:
-        msg_score = sub.get('message_analysis')
-        if msg_score is not None and msg_score >= 70:
+        # Use message_boost (tiered) for inbound leads, fall back to message_analysis for legacy
+        msg_boost = sub.get('message_boost', 0)
+        if msg_boost >= 15:
             return "submitted a strong inbound inquiry with clear buying signals"
-        elif msg_score is not None and msg_score >= 40:
+        elif msg_boost >= 8:
             return "submitted an inbound inquiry with moderate interest signals"
+        elif msg_boost > 0:
+            return "submitted an inbound inquiry with some interest signals"
         else:
-            return "submitted an inbound form with limited purchase intent"
+            return "submitted an inbound form with a generic message"
 
     if form_count > 0:
         return f"submitted {form_count} inbound form{'s' if form_count > 1 else ''}"
@@ -283,54 +290,50 @@ def _inbound_size_fragment(sub, props):
     if size_score is None:
         return None
 
-    # Try to get the enum value for a descriptive label
+    # Try to get the enum value for a descriptive label (same fallback chain as scoring)
     org_size = (
         (props.get('organization_size') or '').strip().upper()
+        or (props.get('organisation_size__product_') or '').strip().upper()
         or (props.get('company_employee_size_range__c_') or '').strip().upper()
     )
     size_label = _SIZE_LABELS.get(org_size, "")
 
-    config = get_inbound_scoring_config()
-    sweet_spots = {"SIX_TO_TWENTY", "TWENTY_ONE_TO_FIFTY"}
-
-    if org_size in sweet_spots:
-        if size_label:
-            return f"from a {size_label} in our sweet spot"
-        return "from an ideally-sized organization"
-    elif size_score >= 60:
+    if size_score >= 60:
         if size_label:
             return f"from a {size_label}"
-        return "from a sizable organization"
-    elif size_score >= 30:
+        return "from a qualifying organization"
+    elif size_score > 0:
         if size_label:
             return f"from a {size_label}"
         return "from a smaller organization"
     else:
-        if size_label:
-            return f"from a {size_label}"
-        return "with limited size data"
+        # Score is 0 — non-qualifying size or no data
+        if org_size in ("JUST_ME", "TWO_TO_FIVE"):
+            return f"from a {size_label}" if size_label else "from a small practice"
+        elif org_size:
+            return f"from a {size_label}" if size_label else "with unrecognized size data"
+        return None  # No size data at all — omit from rationale
 
 
 def _inbound_usage_fragment(sub, props):
     """Describe product usage signals (contact + company) for inbound rationale."""
     parts = []
 
-    # Contact usage boost
+    # Contact usage boost (thresholds match config: +10 for >10 sessions, +5 for >5)
     contact_boost = sub.get('contact_usage_boost', 0)
-    if contact_boost >= 6:
+    if contact_boost >= 10:
+        parts.append("highly active product user")
+    elif contact_boost >= 5:
         parts.append("active product user")
-    elif contact_boost >= 3:
-        parts.append("some prior product usage")
 
-    # Company usage
-    company_score = sub.get('company_usage')
-    if company_score is not None:
-        if company_score >= 70:
-            parts.append("strong existing product usage at their company")
-        elif company_score >= 40:
-            parts.append("moderate product adoption at their company")
-        elif company_score > 0:
-            parts.append("some product usage at their company")
+    # Company usage boost (thresholds match config: +15 for strong, +10 moderate, +5 some)
+    company_boost = sub.get('company_boost', 0)
+    if company_boost >= 15:
+        parts.append("strong existing product usage at their company")
+    elif company_boost >= 10:
+        parts.append("moderate product adoption at their company")
+    elif company_boost > 0:
+        parts.append("some product usage at their company")
 
     if not parts:
         return None

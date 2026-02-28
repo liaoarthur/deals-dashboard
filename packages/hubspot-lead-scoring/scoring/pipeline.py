@@ -161,7 +161,8 @@ def _run_inbound_pipeline(lead_id, lead_type, context):
 
     composite_score = inbound_result["score"]
     sub_scores = inbound_result["sub_scores"]
-    weights_used = inbound_result["weights_used"]
+    # Inbound v2: size is sole base, all others are additive boosts (no weighted average)
+    weights_used = {"model": "size_base_plus_boosts"}
     modules_run = inbound_result["modules_run"]
 
     # Classify tier

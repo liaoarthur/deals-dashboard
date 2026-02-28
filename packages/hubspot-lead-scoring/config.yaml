@@ -228,34 +228,45 @@ score_floors:
 inbound_scoring:
   # ── Size scoring (Criterion 1) ─────────────────────────────────────────
   # Maps organization_size enum → 0-100 score.
-  # Sweet spots: SIX_TO_TWENTY and TWENTY_ONE_TO_FIFTY.
+  # Positive marking: only qualifying sizes (6+) get positive scores.
+  # Score is multiplied by field_confidence based on which property provided the value.
   size_enum_scores:
-    JUST_ME: 15
-    TWO_TO_FIVE: 35
-    SIX_TO_TWENTY: 80
-    TWENTY_ONE_TO_FIFTY: 85
-    FIFTY_ONE_PLUS: 65
-    FIVEHUNDREDPLUS: 50
-    UNKNOWN: 30
-  size_no_data_score: 20
+    JUST_ME: 0
+    TWO_TO_FIVE: 0
+    SIX_TO_TWENTY: 40
+    TWENTY_ONE_TO_FIFTY: 45
+    FIFTY_ONE_PLUS: 35
+    FIVEHUNDREDPLUS: 25
+    UNKNOWN: 0
+  size_no_data_score: 0
 
-  # ── Weights ────────────────────────────────────────────────────────────
-  # Base Score = weighted_average(size, message, [company_usage])
-  # When company usage data exists:
-  weights_with_company:
-    size: 0.45
-    message: 0.30
-    company_usage: 0.25
-  # When no company usage data:
-  weights_without_company:
-    size: 0.55
-    message: 0.45
-  # When no message either (fallback):
-  weights_size_only:
-    size: 1.0
+  # Confidence multiplier by field source (applied to base enum score)
+  field_confidence:
+    primary: 1.0       # organization_size — self-reported on form
+    fallback1: 0.8     # organisation_size__product_ — from product signup
+    fallback2: 0.5     # company_employee_size_range__c_ — from CRM enrichment
+
+  # ── Message intent boost (Criterion 3) — tiered, additive ─────────────
+  # Claude scores message 0-100, then mapped to a boost tier.
+  # Generic/spam/short messages score 0 from Claude → +0 boost.
+  message_boost_tiers:
+    - { min: 70, boost: 25 }   # Strong procurement intent
+    - { min: 50, boost: 18 }   # Clear buying signals
+    - { min: 30, boost: 8 }    # Real interest beyond generic
+    # Below 30 (generic/spam/absent) → +0
+
+  # ── Company usage boost (Criterion 5) — tiered, additive ─────────────
+  # Blended company score (0-100 from user_count + session_count) → boost tier.
+  company_boost_tiers:
+    - { min: 70, boost: 15 }   # Strong product adoption
+    - { min: 40, boost: 10 }   # Moderate adoption
+    - { min: 1,  boost: 5 }    # Some usage
+    # No data → +0
 
   # ── Role scoring (Criterion 2) — boost only ───────────────────────────
-  role_boost_leadership: 10
+  # Positive marking: +25 for financial/executive/medical/operational leadership.
+  # Exclusion keywords are checked FIRST — "VP of Marketing" → excluded → +0.
+  role_boost_leadership: 25
   role_boost_non_leadership: 0
   leadership_keywords:
     - "owner"
@@ -277,17 +288,29 @@ inbound_scoring:
     - "administrator"
     - "partner"
     - "senior physician"
-    - "attending"
     - "department chair"
+    - "chief medical informatics officer"
+    - "chief innovation officer"
+  role_exclusion_keywords:
+    - "human resources"
+    - "talent acquisition"
+    - "physician recruiting"
+    - "marketing"
+    - "recruitment"
+    - "hr"
+    - "recruiter"
+    - "communications"
+    - "public relations"
+    - "pr"
 
   # ── Contact product usage (Criterion 4) — boost only ───────────────────
+  # Positive marking: only meaningful usage (>5 sessions + recent) earns a boost.
   contact_usage:
-    high_sessions: 5         # ≥ this + recent → max boost
-    mid_sessions: 2          # ≥ this + recent → mid boost
+    high_sessions: 10        # ≥ this + recent → max boost
+    mid_sessions: 5          # ≥ this + recent → mid boost
     recency_days: 30         # "recent" = active within N days
-    boost_high: 8
-    boost_mid: 6
-    boost_low: 3             # any sessions at all
+    boost_high: 10
+    boost_mid: 5
 
   # ── Company product usage (Criterion 5) — weighted when data exists ────
   company_usage:
@@ -313,8 +336,9 @@ inbound_scoring:
 # Score thresholds for tier labels. Checked in descending min_score order.
 tiers:
   - { label: "A-Priority", min_score: 80 }
-  - { label: "B-Monitor",  min_score: 50 }
-  - { label: "C-Routine",  min_score: 0  }
+  - { label: "B-Hot",      min_score: 66 }
+  - { label: "C-Warm",     min_score: 50 }
+  - { label: "D-Baseline", min_score: 0  }
 
 # ─── Deduplication ────────────────────────────────────────────────────────────
 dedup:

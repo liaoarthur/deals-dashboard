@@ -66,51 +66,29 @@
             const [claySending, setClaySending] = useState(false);
             const contacts = org.contacts || [];
 
-            // ── Clay Contact Search state (per-lookalike company) ──
-            const [clayContacts, setClayContacts] = useState(null);
-            const [loadingClaySearch, setLoadingClaySearch] = useState(false);
+            // ── Contact Enrichment state (Apollo + Clay, per-lookalike company) ──
+            const [enrichedContacts, setEnrichedContacts] = useState(null);
+            const [loadingEnrichment, setLoadingEnrichment] = useState(false);
             const [showRerunPrompt, setShowRerunPrompt] = useState(false);
             const [cachedSearchResult, setCachedSearchResult] = useState(null);
-            const [claySearchError, setClaySearchError] = useState(null);
-            const clayPollRef = React.useRef(null);
+            const [enrichmentError, setEnrichmentError] = useState(null);
+            const [enrichmentStatus, setEnrichmentStatus] = useState(null);
+            const [sourcesUsed, setSourcesUsed] = useState([]);
+            const enrichPollRef = React.useRef(null);
 
-            const searchClayContacts = async (force = false) => {
+            const searchEnrichedContacts = async (force = false) => {
                 const domain = org.website;
                 if (!domain) {
-                    setClaySearchError('No website/domain on this company — cannot search Clay');
+                    setEnrichmentError('No website/domain on this company');
                     return;
                 }
 
-                setLoadingClaySearch(true);
-                setClaySearchError(null);
+                setLoadingEnrichment(true);
+                setEnrichmentError(null);
                 setShowRerunPrompt(false);
 
                 try {
-                    if (!force) {
-                        const checkResp = await fetch(`${API_BASE_URL}/api/check-clay-search`, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            credentials: 'include',
-                            body: JSON.stringify({ domain }),
-                        });
-                        if (checkResp.status === 401) { window.location.href = '/login.html'; return; }
-                        const checkData = await checkResp.json();
-
-                        if (checkData.found && checkData.status === 'complete') {
-                            setClayContacts(checkData.contacts || []);
-                            setCachedSearchResult(checkData);
-                            setShowRerunPrompt(true);
-                            setLoadingClaySearch(false);
-                            return;
-                        }
-
-                        if (checkData.found && checkData.status === 'searching') {
-                            startClayPolling(checkData.company_key);
-                            return;
-                        }
-                    }
-
-                    const triggerResp = await fetch(`${API_BASE_URL}/api/trigger-clay-search`, {
+                    const resp = await fetch(`${API_BASE_URL}/api/trigger-enrichment-search`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         credentials: 'include',
@@ -123,63 +101,88 @@
                             force,
                         }),
                     });
-                    const triggerData = await triggerResp.json();
+                    if (resp.status === 401) { window.location.href = '/login.html'; return; }
+                    const data = await resp.json();
 
-                    if (triggerData.error) {
-                        setClaySearchError(triggerData.error);
-                        setLoadingClaySearch(false);
+                    if (data.error) {
+                        setEnrichmentError(data.error);
+                        setLoadingEnrichment(false);
                         return;
                     }
 
-                    if (triggerData.already_cached) {
-                        searchClayContacts(false);
+                    // If we got cached complete results back
+                    if (data.found && data.status === 'complete') {
+                        setEnrichedContacts(data.contacts || []);
+                        setSourcesUsed(data.sources_used || []);
+                        setCachedSearchResult(data);
+                        setShowRerunPrompt(true);
+                        setLoadingEnrichment(false);
                         return;
                     }
 
-                    startClayPolling(triggerData.company_key);
+                    // Set Apollo contacts immediately if returned
+                    if (data.contacts && data.contacts.length > 0) {
+                        setEnrichedContacts(data.contacts);
+                    }
+                    setSourcesUsed(data.sources_used || []);
 
+                    // If Clay is still searching, poll for merged results
+                    if (data.status === 'searching') {
+                        setEnrichmentStatus('searching');
+                        startEnrichmentPolling(data.company_key);
+                    } else {
+                        setEnrichedContacts(data.contacts || []);
+                        setCachedSearchResult(data);
+                        setShowRerunPrompt(true);
+                        setLoadingEnrichment(false);
+                    }
                 } catch (e) {
-                    console.error('[Clay Search] Error:', e);
-                    setClaySearchError('Failed to search contacts');
-                    setLoadingClaySearch(false);
+                    console.error('[Enrichment] Error:', e);
+                    setEnrichmentError('Failed to search contacts');
+                    setLoadingEnrichment(false);
                 }
             };
 
-            const startClayPolling = (companyKey) => {
-                if (clayPollRef.current) clearInterval(clayPollRef.current);
+            const startEnrichmentPolling = (companyKey) => {
+                if (enrichPollRef.current) clearInterval(enrichPollRef.current);
                 let pollCount = 0;
                 const maxPolls = 40;
 
-                clayPollRef.current = setInterval(async () => {
+                enrichPollRef.current = setInterval(async () => {
                     pollCount++;
                     try {
-                        const resp = await fetch(`${API_BASE_URL}/api/clay-search-status/${companyKey}`, { credentials: 'include' });
+                        const resp = await fetch(
+                            `${API_BASE_URL}/api/enrichment-status/${companyKey}`,
+                            { credentials: 'include' }
+                        );
                         const data = await resp.json();
 
                         if (data.contacts && data.contacts.length > 0) {
-                            setClayContacts(data.contacts);
+                            setEnrichedContacts(data.contacts);
                         }
+                        setSourcesUsed(data.sources_used || []);
 
                         if (data.status === 'complete' || pollCount >= maxPolls) {
-                            clearInterval(clayPollRef.current);
-                            clayPollRef.current = null;
-                            setClayContacts(data.contacts || []);
+                            clearInterval(enrichPollRef.current);
+                            enrichPollRef.current = null;
+                            setEnrichedContacts(data.contacts || []);
+                            setEnrichmentStatus('complete');
                             setCachedSearchResult(data);
                             setShowRerunPrompt(true);
-                            setLoadingClaySearch(false);
+                            setLoadingEnrichment(false);
                         }
                     } catch (e) {
-                        console.error('[Clay Poll] Error:', e);
-                        clearInterval(clayPollRef.current);
-                        clayPollRef.current = null;
-                        setClaySearchError('Polling failed — try again');
-                        setLoadingClaySearch(false);
+                        console.error('[Enrichment Poll] Error:', e);
+                        clearInterval(enrichPollRef.current);
+                        enrichPollRef.current = null;
+                        setEnrichmentError('Polling failed — try again');
+                        setLoadingEnrichment(false);
                     }
                 }, 3000);
             };
 
             React.useEffect(() => {
-                return () => { if (clayPollRef.current) clearInterval(clayPollRef.current); };
+                return () => { if (enrichPollRef.current) clearInterval(enrichPollRef.current); };
             }, []);
 
             const seedClayCompany = async () => {
@@ -312,44 +315,46 @@
                         </>
                     )}
 
-                    {/* ── Clay Contact Search ──── */}
+                    {/* ── Contact Enrichment (Apollo + Clay) ──── */}
                     <div className="clay-search-section">
                         <div className="clay-search-header">
-                            <span className="clay-search-label">Clay Contacts</span>
+                            <span className="clay-search-label">Enriched Contacts</span>
                             <button
                                 className="clay-seed-btn"
-                                onClick={() => searchClayContacts(false)}
-                                disabled={loadingClaySearch || !org.website}
-                                title={org.website ? `Search Clay for contacts at ${org.website}` : 'No website — cannot search'}
+                                onClick={() => searchEnrichedContacts(false)}
+                                disabled={loadingEnrichment || !org.website}
+                                title={org.website ? `Search Apollo + Clay for contacts at ${org.website}` : 'No website'}
                             >
-                                {loadingClaySearch ? 'Searching...' : 'Search'}
+                                {loadingEnrichment ? 'Searching...' : 'Enrich Contacts'}
                             </button>
                         </div>
 
-                        {claySearchError && (
-                            <div className="text-error">{claySearchError}</div>
+                        {enrichmentError && (
+                            <div className="text-error">{enrichmentError}</div>
                         )}
 
                         {showRerunPrompt && cachedSearchResult && (
                             <div className="clay-rerun-prompt">
                                 <span>
-                                    {new Date(cachedSearchResult.searched_at).toLocaleDateString()} — {(clayContacts || []).length} contact{(clayContacts || []).length !== 1 ? 's' : ''}
+                                    {new Date(cachedSearchResult.searched_at).toLocaleDateString()}
+                                    {' — '}{(enrichedContacts || []).length} contact{(enrichedContacts || []).length !== 1 ? 's' : ''}
+                                    {sourcesUsed.length > 0 && ` (${sourcesUsed.join(' + ')})`}
                                 </span>
-                                <button onClick={() => searchClayContacts(true)}>Re-run</button>
+                                <button onClick={() => searchEnrichedContacts(true)}>Re-run</button>
                             </div>
                         )}
 
-                        {loadingClaySearch && !clayContacts && (
-                            <div className="text-searching">Searching Clay...</div>
+                        {loadingEnrichment && !enrichedContacts && (
+                            <div className="text-searching">Searching contacts...</div>
                         )}
 
-                        {loadingClaySearch && clayContacts && clayContacts.length > 0 && (
+                        {loadingEnrichment && enrichedContacts && enrichedContacts.length > 0 && (
                             <div className="text-searching">
-                                Found {clayContacts.length} so far, still searching...
+                                Found {enrichedContacts.length} so far{enrichmentStatus === 'searching' ? ', waiting for Clay...' : ''}
                             </div>
                         )}
 
-                        {clayContacts && clayContacts.length > 0 && (
+                        {enrichedContacts && enrichedContacts.length > 0 && (
                             <div className="contacts-list">
                                 <div className="contact-row contact-row-header">
                                     <span>Name</span>
@@ -358,9 +363,17 @@
                                     <span>Phone(s)</span>
                                     <span>Links</span>
                                 </div>
-                                {clayContacts.map((c, idx) => (
+                                {enrichedContacts.map((c, idx) => (
                                     <div key={idx} className="contact-row">
-                                        <span className="contact-name">{c.name || '—'}</span>
+                                        <span className="contact-name">
+                                            {c.name || '—'}
+                                            {c.source && (
+                                                <React.Fragment>
+                                                    <br/>
+                                                    <span className={`contact-badge ${c.source}`}>{c.source}</span>
+                                                </React.Fragment>
+                                            )}
+                                        </span>
                                         <span className="contact-title">{c.title || '—'}</span>
                                         <span>
                                             {c.email ? <a href={`mailto:${c.email}`}>{c.email}</a> : '—'}
@@ -376,8 +389,8 @@
                             </div>
                         )}
 
-                        {clayContacts && clayContacts.length === 0 && !loadingClaySearch && (
-                            <div className="text-muted text-small">No contacts found from Clay</div>
+                        {enrichedContacts && enrichedContacts.length === 0 && !loadingEnrichment && (
+                            <div className="text-muted text-small">No contacts found</div>
                         )}
                     </div>
                 </div>

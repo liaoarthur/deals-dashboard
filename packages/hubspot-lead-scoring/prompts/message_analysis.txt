@@ -5,23 +5,20 @@ Message:
 {{MESSAGE}}
 """
 
-Score the message 0-100 based on overall buying intent — how likely is this person to become a real sales opportunity versus a routine demo request?
+Score the message 0-100 based on overall buying intent — how likely is this person to become a real sales opportunity?
+
+Positive marking: the default score is 0. Only award points when the message contains concrete buying signals. Do not give credit for simply filling out a form.
 
 Calibration guide:
-- 0-20: Spam, irrelevant, or no real interest
-- 20-40: Generic inquiry with no specifics ("I'd like a demo", "Tell me more about your product", "Can you send me info?"). This is the baseline for a standard demo request.
-- 40-60: Shows some real interest beyond a generic ask — mentions a specific problem, use case, workflow pain point, or team context
-- 60-80: Clear buying signals — asks about pricing, mentions a timeline, references a decision process, describes specific requirements, or indicates they are actively evaluating solutions
-- 80-100: Strong procurement intent — mentions budget, RFP, committee review, implementation timeline, or is clearly in an active buying process
+- 0: Spam, irrelevant, single word/very short ("hi", "demo", "info"), or generic demo requests with no specifics ("I'd like a demo", "Tell me more about your product", "Can you send me info?", "Request a demo"). This is the default — any form submission lacking specific buying signals scores 0.
+- 30-50: Real interest beyond a generic ask — mentions a specific problem, use case, workflow pain point, team context, or asks about specific features or integrations (e.g., "Do you integrate with Epic?" is 35-45)
+- 50-70: Clear buying signals — asks about pricing, mentions a timeline, references a decision process, describes specific requirements, or indicates they are actively evaluating solutions
+- 70-100: Strong procurement intent — mentions budget, RFP, committee review, implementation timeline, or is clearly in an active buying process
 
-Additional calibration notes:
-- Direct questions about specific features, integrations, or pricing indicate higher intent — bump up +5-10 from baseline (e.g., "Do you integrate with Epic?" is 45-55, not 25-35)
-- Single words or very short non-descriptive messages (under ~15 characters, e.g., "hi", "demo", "info") indicate minimal effort and low intent — score 15-25
-
-Important: Most messages will be short and lack detail. That's fine — a short generic "request a demo" is a 25-35. Don't inflate scores just because someone filled out a form. The score should reflect genuine buying signals present in the text, not assumed intent.
+Important: Most messages will be short and generic. That is expected — score them 0. The score should reflect genuine buying signals present in the text, not assumed intent.
 
 Return ONLY a JSON object with these fields:
 - "intent_score" (integer 0-100): The holistic buying-intent score
-- "signal_summary" (string, 1 sentence): Brief explanation of what signals you detected (or "Generic inquiry, no specific buying signals" if none)
+- "signal_summary" (string, 1 sentence): Brief explanation of what signals you detected (or "No specific buying signals" if none)
 
 No explanation, no markdown, just the JSON object.

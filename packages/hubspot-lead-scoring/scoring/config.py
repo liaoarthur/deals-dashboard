@@ -38,8 +38,9 @@ def get_tier_config():
     """Return tier classification thresholds, sorted descending by min_score."""
     tiers = get_config().get('tiers', [
         {"label": "A-Priority", "min_score": 80},
-        {"label": "B-Monitor", "min_score": 50},
-        {"label": "C-Routine", "min_score": 0},
+        {"label": "B-Hot", "min_score": 66},
+        {"label": "C-Warm", "min_score": 50},
+        {"label": "D-Baseline", "min_score": 0},
     ])
     return sorted(tiers, key=lambda t: t['min_score'], reverse=True)
 

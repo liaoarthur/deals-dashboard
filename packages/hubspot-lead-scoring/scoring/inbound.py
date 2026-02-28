@@ -1,15 +1,20 @@
 """Inbound lead scoring — 5-criteria system for inbound leads.
 
+Positive marking: leads start at 0 and only gain points from criteria
+that demonstrate real intent. Non-qualifying sizes, generic messages,
+excluded roles, and low product usage all score 0.
+
+Size is the sole foundation. All other criteria are additive boosts.
+
 Criteria:
-  1. Size         — org size enum → weighted score
-  2. Role         — leadership detection → boost only (+0 to +10)
-  3. Message      — buying intent via Claude analysis → weighted score
-  4. Contact Usage — product session count + recency → boost only (+0 to +8)
-  5. Company Usage — company session count + user count → weighted when data exists
+  1. Size         — org size enum × field confidence → base score (0 for non-qualifying)
+  2. Role         — leadership detection with exclusions → boost (+0 or +25)
+  3. Message      — buying intent via Claude analysis → boost (+0, +8, +18, or +25)
+  4. Contact Usage — product session count + recency → boost (+0, +5, or +10)
+  5. Company Usage — company session/user count → boost (+0, +5, +10, or +15)
 
 Architecture:
-  Base Score = weighted_average(size, message, [company_usage])
-  Final Score = min(100, Base + role_boost + contact_usage_boost)
+  Final = min(100, size_score + role_boost + message_boost + company_boost + contact_boost)
 """
 
 import re
@@ -24,12 +29,14 @@ from .claude_client import lookup_person
 
 def score_inbound(context):
     """
-    Run all 5 inbound scoring criteria and compute the composite score.
+    Run all 5 inbound scoring criteria and compute the final score.
+
+    Size is the sole base. All other criteria are additive boosts.
+    Final = min(100, size + role + message + company + contact)
 
     Returns dict with:
       - score (0-100)
-      - sub_scores: {size, message_analysis, company_usage, role_boost, contact_usage_boost}
-      - weights_used: the weight dict that was applied
+      - sub_scores: {size, role_boost, message_boost, company_boost, contact_usage_boost, ...}
       - modules_run: list of criteria that ran
     """
     config = get_inbound_scoring_config()
@@ -39,19 +46,19 @@ def score_inbound(context):
     sub_scores = {}
     modules_run = []
 
-    # ── Criterion 1: Size ────────────────────────────────────────────────
+    # ── Criterion 1: Size (base score) ─────────────────────────────────
     size_score = _score_size(props, config)
     sub_scores["size"] = size_score
     modules_run.append("size")
     print(f"[inbound] size={size_score}", file=sys.stderr)
 
-    # ── Criterion 2: Role (boost only) ───────────────────────────────────
+    # ── Criterion 2: Role (boost) ──────────────────────────────────────
     role_boost = _score_role(context, config)
     sub_scores["role_boost"] = role_boost
     modules_run.append("role_boost")
     print(f"[inbound] role_boost=+{role_boost}", file=sys.stderr)
 
-    # ── Criterion 3: Message analysis ────────────────────────────────────
+    # ── Criterion 3: Message analysis (boost) ──────────────────────────
     message_text = extract_message_text(context)
     message_score = None
     if message_text and len(message_text.strip()) >= 10:
@@ -61,48 +68,44 @@ def score_inbound(context):
             print(f"[inbound] Message analysis failed: {e}", file=sys.stderr)
             message_score = None
 
-    has_message = message_score is not None
-    if has_message:
-        sub_scores["message_analysis"] = message_score
-        modules_run.append("message_analysis")
-        print(f"[inbound] message_analysis={message_score}", file=sys.stderr)
+    message_boost = _message_intent_boost(message_score, config)
+    sub_scores["message_boost"] = message_boost
+    modules_run.append("message_boost")
+    if message_score is not None:
+        sub_scores["message_analysis_raw"] = message_score
+        print(f"[inbound] message: intent={message_score} → boost=+{message_boost}", file=sys.stderr)
     else:
-        print("[inbound] No analyzable message, excluding from weights", file=sys.stderr)
+        print(f"[inbound] message: no analyzable message → boost=+0", file=sys.stderr)
 
-    # ── Criterion 4: Contact product usage (boost only) ──────────────────
+    # ── Criterion 4: Contact product usage (boost) ─────────────────────
     contact_boost = _score_contact_product_usage(props, config)
     sub_scores["contact_usage_boost"] = contact_boost
     modules_run.append("contact_usage_boost")
     print(f"[inbound] contact_usage_boost=+{contact_boost}", file=sys.stderr)
 
-    # ── Criterion 5: Company product usage ───────────────────────────────
-    company_usage_score, has_company_data = _score_company_product_usage(company, config)
+    # ── Criterion 5: Company product usage (boost) ─────────────────────
+    company_blended, has_company_data = _score_company_product_usage(company, config)
+    company_boost = _company_usage_boost(company_blended, has_company_data, config)
+    sub_scores["company_boost"] = company_boost
+    modules_run.append("company_boost")
     if has_company_data:
-        sub_scores["company_usage"] = company_usage_score
-        modules_run.append("company_usage")
-        print(f"[inbound] company_usage={company_usage_score}", file=sys.stderr)
+        sub_scores["company_usage_raw"] = company_blended
+        print(f"[inbound] company: blended={company_blended} → boost=+{company_boost}", file=sys.stderr)
     else:
-        print("[inbound] No company usage data, excluding from weights", file=sys.stderr)
+        print(f"[inbound] company: no data → boost=+0", file=sys.stderr)
 
-    # ── Composite calculation ────────────────────────────────────────────
-    base_score, weights_used = _compute_inbound_composite(
-        size_score, message_score, company_usage_score,
-        has_message, has_company_data, config,
-    )
-
-    # Add boosts (capped at 100)
-    final_score = min(100, base_score + role_boost + contact_boost)
+    # ── Final score (all additive, capped at 100) ──────────────────────
+    final_score = min(100, size_score + role_boost + message_boost + company_boost + contact_boost)
 
     print(
-        f"[inbound] base={base_score} + role_boost={role_boost} + contact_boost={contact_boost} "
-        f"= {final_score}",
+        f"[inbound] size={size_score} + role=+{role_boost} + msg=+{message_boost} "
+        f"+ co=+{company_boost} + contact=+{contact_boost} = {final_score}",
         file=sys.stderr,
     )
 
     return {
         "score": final_score,
         "sub_scores": sub_scores,
-        "weights_used": weights_used,
         "modules_run": modules_run,
     }
 
@@ -111,29 +114,40 @@ def score_inbound(context):
 
 def _score_size(props, config):
     """
-    Score based on organization_size enum.
-    Fallback chain: organization_size → organisation_size__product_ → company_employee_size_range__c_
-    All on the contact object.
+    Score based on organization_size enum with confidence multiplier.
+
+    Fallback chain (each field has a confidence multiplier applied to the base score):
+      organization_size           → 100% of base score (primary)
+      organisation_size__product_ → 80% of base score  (fallback1)
+      company_employee_size_range__c_ → 50% of base score (fallback2)
+
+    Positive marking: JUST_ME, TWO_TO_FIVE, UNKNOWN, and no data all return 0.
+    Only SIX_TO_TWENTY(80), TWENTY_ONE_TO_FIFTY(85), FIFTY_ONE_PLUS(65),
+    FIVEHUNDREDPLUS(50) get positive scores.
     """
     enum_scores = config.get("size_enum_scores", {})
-    no_data = config.get("size_no_data_score", 20)
+    no_data = config.get("size_no_data_score", 0)
+    confidence = config.get("field_confidence", {"primary": 1.0, "fallback1": 0.8, "fallback2": 0.5})
 
-    # Primary: organization_size
-    raw = (props.get("organization_size") or "").strip().upper()
-    if raw and raw in enum_scores:
-        return enum_scores[raw]
+    # Try each field in order with decreasing confidence
+    fields = [
+        ("organization_size", confidence.get("primary", 1.0)),
+        ("organisation_size__product_", confidence.get("fallback1", 0.8)),
+        ("company_employee_size_range__c_", confidence.get("fallback2", 0.5)),
+    ]
 
-    # Fallback 1: organisation_size__product_
-    fallback1 = (props.get("organisation_size__product_") or "").strip().upper()
-    if fallback1 and fallback1 in enum_scores:
-        return enum_scores[fallback1]
+    for field_name, conf_multiplier in fields:
+        raw = (props.get(field_name) or "").strip().upper()
+        if raw and raw in enum_scores:
+            base_score = enum_scores[raw]
+            # No need to multiply if base score is 0 (non-qualifying size)
+            if base_score == 0:
+                return 0
+            final = round(base_score * conf_multiplier)
+            print(f"[inbound] size: {field_name}={raw} → {base_score} × {conf_multiplier} = {final}", file=sys.stderr)
+            return final
 
-    # Fallback 2: company_employee_size_range__c_
-    fallback2 = (props.get("company_employee_size_range__c_") or "").strip().upper()
-    if fallback2 and fallback2 in enum_scores:
-        return enum_scores[fallback2]
-
-    # No data
+    # No data at all
     return no_data
 
 
@@ -142,11 +156,13 @@ def _score_size(props, config):
 def _score_role(context, config):
     """
     Determine role boost: +leadership_boost if leadership, +0 otherwise.
+    Exclusion keywords are checked FIRST — e.g., "VP of Marketing" → excluded → +0.
     If both role fields are empty, perform a web search via lookup_person().
     """
     props = context.get("properties", {})
-    leadership_boost = config.get("role_boost_leadership", 10)
+    leadership_boost = config.get("role_boost_leadership", 30)
     keywords = config.get("leadership_keywords", [])
+    exclusion_keywords = config.get("role_exclusion_keywords", [])
 
     # Primary: organisation_type__product_ (self-reported role in product)
     role_text = (props.get("organisation_type__product_") or "").strip()
@@ -156,9 +172,14 @@ def _score_role(context, config):
         role_text = (props.get("lc_job_title") or "").strip()
 
     if role_text:
+        # Check exclusions FIRST — excluded roles get +0 even if they match leadership
+        if _is_excluded_role(role_text, exclusion_keywords):
+            print(f"[inbound] Role '{role_text}' matched exclusion keyword — excluded", file=sys.stderr)
+            return 0
+
         # Check if any leadership keyword matches
         if _is_leadership(role_text, keywords):
-            print(f"[inbound] Role '{role_text}' matched leadership keyword", file=sys.stderr)
+            print(f"[inbound] Role '{role_text}' matched leadership keyword → +{leadership_boost}", file=sys.stderr)
             return leadership_boost
         else:
             print(f"[inbound] Role '{role_text}' present but not leadership — neutral", file=sys.stderr)
@@ -167,6 +188,24 @@ def _score_role(context, config):
     # Both fields empty — do a web search
     print("[inbound] No role data, attempting person web search...", file=sys.stderr)
     return _role_from_web_search(context, config)
+
+
+def _is_excluded_role(text, exclusion_keywords):
+    """Check if text matches any exclusion keyword (case-insensitive).
+
+    Exclusion keywords are checked BEFORE leadership keywords.
+    E.g., "VP of Marketing" matches "marketing" → excluded → +0.
+    """
+    text_lower = text.lower()
+    for kw in exclusion_keywords:
+        # Use word boundary matching for short keywords (≤3 chars) to avoid false positives
+        if len(kw) <= 3:
+            if re.search(r'\b' + re.escape(kw.lower()) + r'\b', text_lower):
+                return True
+        else:
+            if kw.lower() in text_lower:
+                return True
+    return False
 
 
 def _is_leadership(text, keywords):
@@ -187,9 +226,11 @@ def _role_from_web_search(context, config):
     """
     Fall back to Claude web search for person role.
     Stores result in context["_enrichment"] for the rationale builder.
+    Checks exclusion keywords against web search title before awarding boost.
     """
     props = context.get("properties", {})
-    leadership_boost = config.get("role_boost_leadership", 10)
+    leadership_boost = config.get("role_boost_leadership", 30)
+    exclusion_keywords = config.get("role_exclusion_keywords", [])
 
     name = (
         props.get("hs_lead_name")
@@ -223,14 +264,19 @@ def _role_from_web_search(context, config):
     is_decision_maker = person_lookup.get("is_decision_maker", False)
     title = person_lookup.get("title", "")
 
+    # Check exclusions against web search title BEFORE awarding boost
+    if title and _is_excluded_role(title, exclusion_keywords):
+        print(f"[inbound] Web search title '{title}' matched exclusion keyword — excluded", file=sys.stderr)
+        return 0
+
     leadership_seniorities = {"founder", "c_suite", "clinical_leader", "vp", "director"}
     if seniority in leadership_seniorities or is_decision_maker:
-        print(f"[inbound] Web search found leadership: {title} ({seniority})", file=sys.stderr)
+        print(f"[inbound] Web search found leadership: {title} ({seniority}) → +{leadership_boost}", file=sys.stderr)
         return leadership_boost
 
     # Check title against leadership keywords as a final fallback
     if title and _is_leadership(title, config.get("leadership_keywords", [])):
-        print(f"[inbound] Web search title '{title}' matched leadership keyword", file=sys.stderr)
+        print(f"[inbound] Web search title '{title}' matched leadership keyword → +{leadership_boost}", file=sys.stderr)
         return leadership_boost
 
     print(f"[inbound] Web search found non-leadership: {title} ({seniority})", file=sys.stderr)
@@ -242,15 +288,16 @@ def _role_from_web_search(context, config):
 def _score_contact_product_usage(props, config):
     """
     Boost based on contact's product usage: session count + recency.
-    Returns +0 to +8.
+    Positive marking: only meaningful usage (>5 sessions + recent) earns a boost.
+
+    Returns +0, +5, or +10.
     """
     cu_config = config.get("contact_usage", {})
-    high_sessions = cu_config.get("high_sessions", 5)
-    mid_sessions = cu_config.get("mid_sessions", 2)
+    high_sessions = cu_config.get("high_sessions", 10)
+    mid_sessions = cu_config.get("mid_sessions", 5)
     recency_days = cu_config.get("recency_days", 30)
-    boost_high = cu_config.get("boost_high", 8)
-    boost_mid = cu_config.get("boost_mid", 6)
-    boost_low = cu_config.get("boost_low", 3)
+    boost_high = cu_config.get("boost_high", 10)
+    boost_mid = cu_config.get("boost_mid", 5)
 
     # Parse session count
     session_count = _parse_number(props.get("db_session_count"))
@@ -260,14 +307,14 @@ def _score_contact_product_usage(props, config):
     # Parse last active date
     is_recent = _is_recent(props.get("db_last_active_date"), recency_days)
 
-    # Tiered boost
-    if session_count >= high_sessions and is_recent:
+    # Must be both high-usage AND recent to earn a boost (strictly greater than thresholds)
+    if session_count > high_sessions and is_recent:
         return boost_high
-    elif session_count >= mid_sessions and is_recent:
+    elif session_count > mid_sessions and is_recent:
         return boost_mid
     else:
-        # Any sessions at all
-        return boost_low
+        # Below threshold or not recent — no boost
+        return 0
 
 
 # ─── Criterion 5: Company Product Usage ─────────────────────────────────────
@@ -309,50 +356,42 @@ def _score_company_product_usage(company, config):
     return max(0, min(100, blended)), True
 
 
-# ─── Composite Calculation ───────────────────────────────────────────────────
+# ─── Boost Helpers ───────────────────────────────────────────────────────────
 
-def _compute_inbound_composite(size_score, message_score, company_usage_score,
-                                has_message, has_company_data, config):
+def _message_intent_boost(intent_score, config):
+    """Convert Claude's 0-100 intent score to a tiered boost.
+
+    Tiers (from config, sorted descending by min):
+      70+ → +20 (strong procurement)
+      50+ → +15 (clear buying signals)
+      30+ → +8  (real interest)
+      <30 → +0  (generic / spam / absent)
     """
-    Compute the weighted base score (before boosts).
+    if intent_score is None:
+        return 0
+    tiers = config.get("message_boost_tiers", [])
+    for tier in tiers:
+        if intent_score >= tier["min"]:
+            return tier["boost"]
+    return 0
 
-    Weight selection:
-    - has_message + has_company_data → weights_with_company
-    - has_message + no company data  → weights_without_company
-    - no message + has_company_data  → redistribute message weight to size/company
-    - no message + no company data   → weights_size_only
+
+def _company_usage_boost(blended_score, has_data, config):
+    """Convert company usage blended score (0-100) to a tiered boost.
+
+    Tiers (from config, sorted descending by min):
+      70+ → +15 (strong adoption)
+      40+ → +10 (moderate adoption)
+      1+  → +5  (some usage)
+      0/no data → +0
     """
-    if has_message and has_company_data:
-        weights = config.get("weights_with_company", {"size": 0.45, "message": 0.30, "company_usage": 0.25})
-        base = (
-            size_score * weights["size"]
-            + message_score * weights["message"]
-            + company_usage_score * weights["company_usage"]
-        )
-        return round(base), weights
-
-    elif has_message and not has_company_data:
-        weights = config.get("weights_without_company", {"size": 0.55, "message": 0.45})
-        base = size_score * weights["size"] + message_score * weights["message"]
-        return round(base), weights
-
-    elif not has_message and has_company_data:
-        # Redistribute message weight proportionally to size + company_usage
-        wc = config.get("weights_with_company", {"size": 0.45, "message": 0.30, "company_usage": 0.25})
-        size_w = wc["size"]
-        company_w = wc["company_usage"]
-        total = size_w + company_w
-        weights = {
-            "size": size_w / total,
-            "company_usage": company_w / total,
-        }
-        base = size_score * weights["size"] + company_usage_score * weights["company_usage"]
-        return round(base), weights
-
-    else:
-        # No message, no company data — size only
-        weights = config.get("weights_size_only", {"size": 1.0})
-        return round(size_score * weights["size"]), weights
+    if not has_data:
+        return 0
+    tiers = config.get("company_boost_tiers", [])
+    for tier in tiers:
+        if blended_score >= tier["min"]:
+            return tier["boost"]
+    return 0
 
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────

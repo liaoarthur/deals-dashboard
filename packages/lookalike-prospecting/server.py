@@ -33,6 +33,7 @@ from core.definitive import get_organizations_from_definitive, get_organization_
 from core.specialty import get_definitive_specialties, get_expanded_specialties
 from core.scoring import score_single_org, calculate_similarity_score, is_specialty_similar, get_match_reasons
 from core.lookalikes import find_lookalikes_from_company_data
+from core.apollo import search_apollo_contacts
 
 # Load credentials from .env file
 load_dotenv()
@@ -46,6 +47,9 @@ if not HUBSPOT_API_KEY:
 
 # Clay webhook for company discovery (optional)
 CLAY_WEBHOOK_URL = os.getenv('CLAY_WEBHOOK_URL')
+
+# Apollo API for contact enrichment (optional)
+APOLLO_API_KEY_CONFIGURED = bool(os.getenv('APOLLO_API_KEY'))
 
 # Create the server
 app = Server("gtm-mcp-server")
@@ -790,6 +794,7 @@ def health():
         'redis': REDIS_ENABLED,
         'openai': bool(os.getenv('OPENAI_API_KEY')),
         'clay': CLAY_WEBHOOK_URL is not None,
+        'apollo': APOLLO_API_KEY_CONFIGURED,
         'auth_users_configured': len(AUTH_USERS) > 0,
     })
 
@@ -1168,6 +1173,218 @@ def clay_search_status(company_key):
         'searched_at': entry.get('searched_at'),
         'contact_count': len(entry.get('contacts', [])),
         'contacts': entry.get('contacts', [])
+    })
+
+
+# ─── Unified Enrichment Cache (Apollo + Clay) ────────────────────────────────
+# Stores combined contacts from ALL enrichment sources, keyed by domain.
+# Apollo results are written immediately (synchronous). Clay results merge in
+# when the async callback arrives and the frontend polls for status.
+_enrichment_cache = {}
+_enrichment_ttl = 2592000  # 30 days
+
+
+def _save_enrichment_to_redis(company_key, data):
+    """Persist unified enrichment cache to Redis."""
+    if not REDIS_ENABLED or not redis_client:
+        return
+    try:
+        redis_client.setex(
+            f"enrichment:{company_key}",
+            _enrichment_ttl,
+            json.dumps(data, default=str)
+        )
+    except Exception as e:
+        print(f"[ENRICHMENT CACHE] Redis save failed for {company_key}: {e}", file=sys.stderr)
+
+
+def _load_enrichment_from_redis(company_key):
+    """Load unified enrichment cache from Redis."""
+    if not REDIS_ENABLED or not redis_client:
+        return None
+    try:
+        raw = redis_client.get(f"enrichment:{company_key}")
+        if raw:
+            data = json.loads(raw)
+            _enrichment_cache[company_key] = data
+            return data
+    except Exception as e:
+        print(f"[ENRICHMENT CACHE] Redis load failed for {company_key}: {e}", file=sys.stderr)
+    return None
+
+
+def _get_enrichment(company_key):
+    """Look up unified enrichment: in-memory first, then Redis."""
+    entry = _enrichment_cache.get(company_key)
+    if entry:
+        return entry
+    return _load_enrichment_from_redis(company_key)
+
+
+# ─── Unified Enrichment Endpoints ─────────────────────────────────────────────
+# Single entry point that fires Apollo (sync) + Clay (async) in parallel.
+# Apollo results come back immediately; Clay results merge in via callback.
+
+@flask_app.route('/api/trigger-enrichment-search', methods=['POST'])
+@require_auth
+def trigger_enrichment_search():
+    """
+    Unified contact enrichment: fires Apollo (sync) + Clay (async) in parallel.
+    Returns Apollo results immediately; Clay results arrive via callback and
+    are merged into the same cache entry when polled.
+
+    POST body (JSON):
+    - domain (required): company website/domain
+    - company_name, state, city, specialty (optional): context for Clay
+    - force (optional, bool): re-run even if cached
+    """
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'Request body is required'}), 400
+
+    domain = (data.get('domain') or '').strip()
+    if not domain:
+        return jsonify({'error': 'domain is required'}), 400
+
+    company_key = get_company_key(domain)
+    if not company_key:
+        return jsonify({'error': 'Invalid domain'}), 400
+
+    force = data.get('force', False)
+    company_name = (data.get('company_name') or '').strip()
+    state = (data.get('state') or '').strip()
+    city = (data.get('city') or '').strip()
+    specialty = (data.get('specialty') or '').strip()
+
+    # Check cache (unless forcing)
+    if not force:
+        existing = _get_enrichment(company_key)
+        if existing and existing.get('status') == 'complete':
+            return jsonify({
+                'found': True,
+                'company_key': company_key,
+                'status': 'complete',
+                'contacts': existing.get('contacts', []),
+                'contact_count': len(existing.get('contacts', [])),
+                'searched_at': existing.get('searched_at'),
+                'sources_used': existing.get('sources_used', []),
+            })
+
+    now = datetime.utcnow().isoformat()
+    sources_used = []
+    apollo_contacts = []
+    clay_triggered = False
+
+    # ── 1. Apollo (synchronous) ──
+    if APOLLO_API_KEY_CONFIGURED:
+        print(f"[ENRICHMENT] Querying Apollo for domain={company_key}", file=sys.stderr)
+        apollo_contacts = search_apollo_contacts(company_key)
+        sources_used.append('apollo')
+        print(f"[ENRICHMENT] Apollo returned {len(apollo_contacts)} contacts", file=sys.stderr)
+
+    # ── 2. Clay (async webhook) ──
+    if CLAY_WEBHOOK_URL:
+        print(f"[ENRICHMENT] Triggering Clay for domain={company_key}", file=sys.stderr)
+        clay_entry = {
+            'domain': company_key,
+            'company_name': company_name,
+            'state': state,
+            'city': city,
+            'specialty': specialty,
+            'searched_at': now,
+            'status': 'searching',
+            'contacts': []
+        }
+        _clay_search_cache[company_key] = clay_entry
+        _save_clay_cache_to_redis(company_key, clay_entry)
+
+        payload = {
+            'company_key': company_key,
+            'company_name': company_name,
+            'domain': company_key,
+            'state': state,
+            'city': city,
+            'specialty': specialty,
+            'source': 'clay_contact_search',
+        }
+        try:
+            resp = requests.post(
+                CLAY_WEBHOOK_URL, json=payload,
+                headers={'Content-Type': 'application/json'}, timeout=10
+            )
+            if resp.status_code in (200, 201, 202):
+                clay_triggered = True
+                sources_used.append('clay')
+        except Exception as e:
+            print(f"[ENRICHMENT] Clay trigger failed: {e}", file=sys.stderr)
+
+    # If neither provider is configured
+    if not APOLLO_API_KEY_CONFIGURED and not CLAY_WEBHOOK_URL:
+        return jsonify({'error': 'No enrichment providers configured (need APOLLO_API_KEY or CLAY_WEBHOOK_URL)'}), 500
+
+    # Determine status: if Clay was triggered, still "searching"; else "complete"
+    status = 'searching' if clay_triggered else 'complete'
+
+    enrichment_entry = {
+        'domain': company_key,
+        'company_name': company_name,
+        'searched_at': now,
+        'status': status,
+        'sources_used': sources_used,
+        'contacts': apollo_contacts,
+    }
+    _enrichment_cache[company_key] = enrichment_entry
+    _save_enrichment_to_redis(company_key, enrichment_entry)
+
+    return jsonify({
+        'success': True,
+        'company_key': company_key,
+        'status': status,
+        'contacts': apollo_contacts,
+        'contact_count': len(apollo_contacts),
+        'sources_used': sources_used,
+        'message': 'Apollo results returned' + ('; Clay search in progress' if clay_triggered else ''),
+    })
+
+
+@flask_app.route('/api/enrichment-status/<path:company_key>', methods=['GET'])
+@require_auth
+def enrichment_status(company_key):
+    """
+    Poll for combined enrichment results (Apollo + Clay).
+    When Clay callback arrives, its contacts are merged into the enrichment entry.
+    """
+    company_key = get_company_key(company_key)
+    entry = _get_enrichment(company_key)
+
+    if not entry:
+        return jsonify({'found': False, 'status': 'not_found'}), 404
+
+    # If enrichment is still waiting for Clay, check if Clay has completed
+    if entry.get('status') == 'searching':
+        clay_entry = _get_clay_search(company_key)
+        if clay_entry and clay_entry.get('status') == 'complete':
+            clay_contacts = clay_entry.get('contacts', [])
+            for c in clay_contacts:
+                if 'source' not in c:
+                    c['source'] = 'clay'
+
+            existing = entry.get('contacts', [])
+            merged = deduplicate_contacts(existing, clay_contacts)
+            entry['contacts'] = merged
+            entry['status'] = 'complete'
+            if 'clay' not in entry.get('sources_used', []):
+                entry['sources_used'].append('clay')
+            _enrichment_cache[company_key] = entry
+            _save_enrichment_to_redis(company_key, entry)
+
+    return jsonify({
+        'found': True,
+        'status': entry.get('status', 'searching'),
+        'searched_at': entry.get('searched_at'),
+        'contact_count': len(entry.get('contacts', [])),
+        'contacts': entry.get('contacts', []),
+        'sources_used': entry.get('sources_used', []),
     })
 
 

@@ -12,6 +12,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 __all__ = [
+    "apollo",
     "cache",
     "contacts",
     "databricks",
