@@ -10,6 +10,23 @@ weights:
     message_analysis: 0.25
     person_role: 0.35
     specialty_company: 0.20
+  marketing_qualified:
+    opportunity_size: 0.20
+    message_analysis: 0.25
+    person_role: 0.35
+    specialty_company: 0.20
+  product_qualified:
+    opportunity_size: 0.25
+    person_role: 0.45
+    specialty_company: 0.30
+  sales_qualified:
+    opportunity_size: 0.25
+    person_role: 0.45
+    specialty_company: 0.30
+  baa:
+    opportunity_size: 0.25
+    person_role: 0.45
+    specialty_company: 0.30
   product:
     opportunity_size: 0.25
     person_role: 0.45

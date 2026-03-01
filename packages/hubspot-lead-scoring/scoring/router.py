@@ -1,12 +1,25 @@
 """Lead type router — determines which scoring modules to run."""
 
 
+# ─── lead_trigger → internal lead type mapping ───────────────────────────────
+# lead_trigger is a Lead property set by HubSpot workflows.
+# Case-insensitive lookup (keys are lowercased).
+LEAD_TRIGGER_MAP = {
+    "inbound marketing qualified lead": "inbound",
+    "marketing qualified lead": "marketing_qualified",
+    "product qualified lead": "product_qualified",
+    "sales qualified lead": "sales_qualified",
+    "baa request": "baa",
+}
+
+
 def classify_lead_type(context):
     """
     Determine lead type from context. Returns one of:
-    'inbound', 'product', 'event', 'other'
+    'inbound', 'marketing_qualified', 'product_qualified',
+    'sales_qualified', 'baa', 'product', 'event', 'other'
 
-    Checks Lead properties first (hs_lead_type), then falls back to
+    Checks Lead property lead_trigger first, then falls back to
     Contact analytics properties and form submissions.
 
     Lead type is a ROUTER — it decides which modules execute,
@@ -16,15 +29,10 @@ def classify_lead_type(context):
     props = context.get("properties", {})
     form_submissions = context.get("form_submissions", [])
 
-    # ─── Check Lead object's own type field first ─────────────────────────
-    hs_lead_type = (lead_props.get("hs_lead_type") or "").lower()
-    if hs_lead_type:
-        if hs_lead_type in ("inbound",):
-            return "inbound"
-        if hs_lead_type in ("product", "product_qualified"):
-            return "product"
-        if hs_lead_type in ("event", "conference", "trade_show"):
-            return "event"
+    # ─── Check lead_trigger property first ────────────────────────────────
+    lead_trigger = (lead_props.get("lead_trigger") or "").strip().lower()
+    if lead_trigger and lead_trigger in LEAD_TRIGGER_MAP:
+        return LEAD_TRIGGER_MAP[lead_trigger]
 
     # ─── Fall back to form submissions + analytics source ─────────────────
     source = (props.get("hs_analytics_source") or "").lower()

@@ -25,7 +25,7 @@ def _headers():
 # ─── Lead ─────────────────────────────────────────────────────────────────────
 
 LEAD_PROPERTIES = [
-    "hs_lead_name", "hs_lead_type", "hs_lead_label", "hs_lead_status",
+    "hs_lead_name", "hs_lead_type", "lead_trigger", "hs_lead_label", "hs_lead_status",
     "hs_pipeline", "hs_pipeline_stage",
     # Scoring-relevant Lead properties
     "team_size",
