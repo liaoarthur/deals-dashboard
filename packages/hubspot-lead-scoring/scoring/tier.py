@@ -141,8 +141,14 @@ def _who_fragment(props, person_lookup=None):
     most informative description possible, e.g.:
     'A clinical leader (Chief Medical Officer, physician and key decision-maker) at Mayo Clinic'
     """
-    # Title: prefer Lead user_role, then Contact jobtitle, then web search title
-    title = (props.get('user_role') or props.get('jobtitle') or '').strip()
+    # Title: prefer inbound role fields, then legacy fields, then web search title
+    title = (
+        props.get('organisation_type__product_')
+        or props.get('lc_job_title')
+        or props.get('user_role')
+        or props.get('jobtitle')
+        or ''
+    ).strip()
     lookup_title = (person_lookup.get('title') or '') if person_lookup else ''
     best_title = title or lookup_title
 
